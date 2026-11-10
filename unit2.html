@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
 </head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
-<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="quiz.html">Quiz</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
 <main><h1>Unit 2: Polymorphism, Abstraction and Comparing Objects</h1>
 <p class="sub">Polymorphism via inheritance · method resolution · interfaces vs inheritance · constructor chaining · abstract classes · immutable classes · Object class · equals / Comparable / Comparator</p>
 
@@ -167,6 +167,7 @@ approved</code></pre><p><b>The role of <code>super</code>:</b> <code>super.work(
 <tr><td>Can have <code>final</code>, <code>static</code>, non-abstract methods</td><td>Abstract methods can't be final</td></tr>
 <tr><td>Use for: a family of related classes</td><td>Use for: a capability across unrelated classes</td></tr>
 </table>
+<p class="sub"><b>Classic (pre-Java 8) exam answer:</b> an interface has only abstract methods, no instance variables and no constructors, and gives 100% abstraction. Java 8+ added default, static and (Java 9) private methods, so mention both if asked.</p>
 <p><b>A design that needs both (EJ26-1c):</b> a payroll system. All employees share <i>state</i> (id, name, base salary) and a salary-calculation skeleton, so that belongs in an <b>abstract class</b>. But only some employees are <code>Taxable</code>, and both employees and vendors are <code>Payable</code>. Those capabilities cut across the hierarchy, so they belong in <b>interfaces</b>. One mechanism alone isn't enough. With only an abstract class, Vendor (not an employee) couldn't be paid by the same code, and Java can't extend two classes. With only interfaces, each employee type would repeat the shared fields and constructor logic.</p>
 <pre><code class="language-java">interface Payable  { double amountDue(); }
 interface Taxable  { default double tax() { return 0.1 * taxableIncome(); } double taxableIncome(); }

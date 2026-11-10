@@ -1,0 +1,1000 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit 3 · Robust Java</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Unit 3: Cloning, Generics, Exceptions, Collections, I/O, Testing and UML</h1>
+<p class="sub">Object cloning · generics · defensive and secure programming · exceptions · assertions · collections · I/O streams · serialization · JUnit · UML · (Lab: LinkedList, Stack, try-catch-finally, files, JDBC)</p>
+
+<h2 id="clone">Object Cloning <span class="tag p">PYQ ES25-3b</span><span class="tag p">PYQ MJ26-5a</span></h2>
+<p><b>Cloning</b> creates an exact copy of an existing object. Java gives you <code>Object.clone()</code>, a <code>protected native</code> method that allocates a new object of the same class and copies every field <b>without calling a constructor</b>.</p>
+<h4>Steps to make a class cloneable</h4>
+<ol><li>Implement the <b>marker interface <code>Cloneable</code></b>. Otherwise <code>Object.clone()</code> throws <code>CloneNotSupportedException</code>.</li>
+<li>Override <code>clone()</code> as <code>public</code> (optionally with a covariant return type).</li>
+<li>Call <code>super.clone()</code>, then deep-copy any mutable fields.</li></ol>
+<h3 id="shallowdeep">Shallow copy vs deep copy</h3>
+<p><b>Shallow copy</b> (the default <code>super.clone()</code>): primitives are copied, but <b>references are copied as references</b>. So the original and the clone <b>share</b> nested objects, and changing a nested object through one is visible through the other.<br>
+<b>Deep copy:</b> nested mutable objects are <b>also cloned</b> recursively, so the copy is fully independent.</p>
+<div class="diagram">SHALLOW                                  DEEP
+ orig ──▶ [name, addr ●]──┐               orig ──▶ [name, addr ●]──▶ [Address: Delhi]
+                          ├─▶ [Address]   copy ──▶ [name, addr ●]──▶ [Address: Delhi] (separate)
+ copy ──▶ [name, addr ●]──┘</div><pre><code class="language-java">class Address implements Cloneable {
+    String city;
+    Address(String c) { city = c; }
+    @Override protected Address clone() throws CloneNotSupportedException { return (Address) super.clone(); }
+}
+
+class Employee implements Cloneable {
+    String name;              // immutable - safe to share
+    int[] scores;             // mutable array
+    Address addr;             // mutable object
+
+    Employee(String n, int[] s, Address a) { name = n; scores = s; addr = a; }
+
+    Employee shallowCopy() throws CloneNotSupportedException {
+        return (Employee) super.clone();               // field-by-field copy
+    }
+    @Override public Employee clone() throws CloneNotSupportedException {   // DEEP
+        Employee e = (Employee) super.clone();
+        e.scores = scores.clone();                     // arrays have a public clone()
+        e.addr   = addr.clone();                       // clone nested object
+        return e;
+    }
+    // Alternative that many prefer: a copy constructor
+    Employee(Employee o) { this(o.name, o.scores.clone(), new Address(o.addr.city)); }
+}
+
+public class CloneDemo {
+    public static void main(String[] args) throws Exception {
+        Employee orig = new Employee(&quot;Asha&quot;, new int[]{90, 80}, new Address(&quot;Delhi&quot;));
+
+        Employee sh = orig.shallowCopy();
+        sh.addr.city = &quot;Mumbai&quot;; sh.scores[0] = 0;
+        System.out.println(&quot;After shallow change, orig: &quot; + orig.addr.city + &quot; &quot; + orig.scores[0]);
+
+        orig.addr.city = &quot;Delhi&quot;; orig.scores[0] = 90;     // reset
+        Employee dp = orig.clone();
+        dp.addr.city = &quot;Pune&quot;; dp.scores[0] = 0;
+        System.out.println(&quot;After deep change, orig:    &quot; + orig.addr.city + &quot; &quot; + orig.scores[0]);
+        System.out.println(orig != dp &amp;&amp; orig.getClass() == dp.getClass());
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">After shallow change, orig: Mumbai 0
+After deep change, orig:    Delhi 90
+true</code></pre><table><tr><th>Shallow copy</th><th>Deep copy</th></tr>
+<tr><td>Copies top-level fields only</td><td>Copies the whole object graph</td></tr>
+<tr><td>Nested objects are shared</td><td>Nested objects are duplicated</td></tr>
+<tr><td>Fast, little memory</td><td>Slower, more memory</td></tr>
+<tr><td>Default <code>super.clone()</code></td><td>Custom <code>clone()</code>, copy constructor, or serialization</td></tr>
+<tr><td>Fine when fields are primitives or immutable</td><td>Needed when fields are mutable</td></tr></table>
+<p><b>Advantages of cloning:</b> fast copying of complex objects without repeating construction logic. Copies keep the exact runtime class. Useful for the Prototype pattern and for defensive copies.<br>
+<b>Limitations:</b> <code>Cloneable</code> has no <code>clone()</code> method, which is a design flaw. The checked <code>CloneNotSupportedException</code> clutters code. It is shallow by default, so deep copy is manual and error-prone. Constructors aren't called, so invariants and counters are skipped. It doesn't work well with <code>final</code> fields, which can't be reassigned after <code>super.clone()</code>. Every class in the hierarchy must cooperate. <i>Effective Java</i> recommends <b>copy constructors or static factory methods</b> instead.</p>
+
+<h2 id="generics">Generic Programming <span class="tag p">PYQ EJ26-3a</span></h2>
+<p><b>Generics</b> let classes, interfaces and methods take <b>type parameters</b>, so one piece of code works with many types and stays <b>type-safe at compile time</b>.</p>
+<pre><code class="language-java">// Without generics (pre-Java 5)
+List list = new ArrayList();
+list.add(&quot;hi&quot;); list.add(42);           // anything goes
+String s = (String) list.get(1);        // compiles, but ClassCastException at RUNTIME
+
+// With generics
+List&lt;String&gt; names = new ArrayList&lt;&gt;();  // diamond operator &lt;&gt;
+names.add(&quot;hi&quot;);
+// names.add(42);                        // COMPILE error - bug caught early
+String t = names.get(0);                // no cast needed</code></pre><p><b>Benefits:</b> ① compile-time type checking ② no explicit casts ③ reusable algorithms (one <code>sort</code> for all types) ④ self-documenting APIs.</p>
+<h3 id="genclass">Generic classes, methods, bounded types, wildcards</h3>
+<pre><code class="language-java">// Generic class with type parameter T
+class Box&lt;T&gt; {
+    private T value;
+    void set(T v) { value = v; }
+    T get() { return value; }
+}
+
+// Two type parameters
+class Pair&lt;K, V&gt; {
+    final K key; final V val;
+    Pair(K k, V v) { key = k; val = v; }
+}
+
+// Generic method: &lt;T&gt; before the return type
+class Util {
+    static &lt;T&gt; void printAll(T[] arr) { for (T x : arr) System.out.print(x + &quot; &quot;); System.out.println(); }
+
+    // Bounded type: T must be Comparable to itself
+    static &lt;T extends Comparable&lt;T&gt;&gt; T max(List&lt;T&gt; list) {
+        T best = list.get(0);
+        for (T x : list) if (x.compareTo(best) &gt; 0) best = x;
+        return best;
+    }
+
+    // Upper-bounded wildcard: read from a list of any Number subtype (PRODUCER)
+    static double sum(List&lt;? extends Number&gt; nums) {
+        double s = 0; for (Number n : nums) s += n.doubleValue(); return s;
+    }
+    // Lower-bounded wildcard: write Integers into a list of Integer or its supertypes (CONSUMER)
+    static void fill(List&lt;? super Integer&gt; dst) { for (int i = 0; i &lt; 3; i++) dst.add(i); }
+
+    // Unbounded wildcard
+    static int size(List&lt;?&gt; anything) { return anything.size(); }
+}
+
+public class GenericsDemo {
+    public static void main(String[] args) {
+        Box&lt;Integer&gt; b = new Box&lt;&gt;(); b.set(10); int x = b.get();
+        Pair&lt;String, Integer&gt; p = new Pair&lt;&gt;(&quot;age&quot;, 20);
+        Util.printAll(new String[]{&quot;a&quot;, &quot;b&quot;});
+        System.out.println(Util.max(List.of(3, 9, 2)));          // 9
+        System.out.println(Util.sum(List.of(1, 2.5, 3L)));       // 6.5
+        List&lt;Number&gt; nums = new ArrayList&lt;&gt;(); Util.fill(nums);  // [0, 1, 2]
+    }
+}</code></pre><ul><li><b>PECS rule:</b> <i>Producer Extends, Consumer Super</i>.</li>
+<li><b>Type erasure:</b> generic type information is removed after compilation (<code>List&lt;String&gt;</code> becomes <code>List</code> in bytecode). As a result you can't do <code>new T()</code>, <code>new T[]</code>, <code>instanceof List&lt;String&gt;</code>, or use primitives as type arguments (<code>List&lt;int&gt;</code> isn't allowed, use <code>Integer</code>).</li>
+<li><code>List&lt;Integer&gt;</code> is <b>not</b> a subtype of <code>List&lt;Number&gt;</code> (generics are <i>invariant</i>). Use wildcards.</li>
+<li>Naming conventions: T = Type, E = Element, K = Key, V = Value, N = Number.</li></ul>
+
+<h2 id="defensive">Defensive and Secure Programming <span class="tag p">PYQ ES25-3c</span></h2>
+<p><b>Defensive programming</b> means writing code that keeps working correctly, or fails safely and clearly, even when it gets unexpected inputs, misuse, or bad conditions. The mindset is: <i>"never trust input, never assume"</i>. <b>Secure programming</b> applies the same idea against <i>malicious</i> inputs, to prevent vulnerabilities.</p>
+<h4>Techniques</h4>
+<ol>
+<li><b>Validate all inputs</b> (parameters, user input, files, network). Check null, range, format and length, and fail fast with clear exceptions: <code>Objects.requireNonNull</code>, <code>IllegalArgumentException</code>.</li>
+<li><b>Preconditions and postconditions</b>. Use <b>assertions</b> for internal invariants and exceptions for public API checks.</li>
+<li><b>Encapsulation:</b> private fields, the least visibility needed, <code>final</code> where possible.</li>
+<li><b>Immutability and defensive copying</b> of mutable inputs and outputs (see <a href="unit2.html#immutable">immutable classes</a>).</li>
+<li><b>Proper exception handling:</b> don't swallow exceptions, don't leak stack traces or internal details to users, and clean up with try-with-resources.</li>
+<li><b>Avoid injection:</b> use <code>PreparedStatement</code> for SQL and never build queries by string concatenation. Escape output (XSS).</li>
+<li><b>Least privilege:</b> grant only the permissions that are needed. Don't hard-code secrets.</li>
+<li><b>Handle sensitive data carefully:</b> store passwords in <code>char[]</code> and clear them after use, hash passwords (bcrypt), use <code>SecureRandom</code> not <code>Random</code>, and use <code>transient</code> for secret fields that must not be serialized.</li>
+<li><b>Guard against deserialization attacks:</b> never deserialize untrusted data, or use <code>ObjectInputFilter</code>.</li>
+<li><b>Fail securely:</b> on error, deny access rather than allow it.</li>
+<li><b>Thread safety</b> for shared state.</li>
+<li><b>Testing</b> (unit tests, edge cases), code review, and static analysis.</li>
+</ol>
+<pre><code class="language-java">public final class BankAccount {
+    private final String owner;
+    private long balancePaise;                                   // avoid double for money
+
+    public BankAccount(String owner, long openingPaise) {
+        this.owner = Objects.requireNonNull(owner, &quot;owner&quot;);     // fail fast on null
+        if (owner.isBlank()) throw new IllegalArgumentException(&quot;owner blank&quot;);
+        if (openingPaise &lt; 0) throw new IllegalArgumentException(&quot;negative opening balance&quot;);
+        this.balancePaise = openingPaise;
+    }
+    public synchronized void withdraw(long amt) {
+        if (amt &lt;= 0) throw new IllegalArgumentException(&quot;amount must be &gt; 0&quot;);
+        if (amt &gt; balancePaise) throw new IllegalStateException(&quot;insufficient funds&quot;);
+        balancePaise -= amt;
+        assert balancePaise &gt;= 0 : &quot;invariant broken&quot;;           // internal sanity check
+    }
+    // SQL: secure version
+    static ResultSet find(Connection c, String user) throws SQLException {
+        PreparedStatement ps = c.prepareStatement(&quot;SELECT * FROM users WHERE name = ?&quot;);
+        ps.setString(1, user);              // input can&#x27;t change the query → no SQL injection
+        return ps.executeQuery();
+    }
+}</code></pre><p><b>Importance in secure software design:</b> most security bugs (injection, buffer and integer overflows, null dereferences, broken access control) come from <i>unchecked assumptions</i>. Defensive code shrinks the attack surface, makes failures visible and contained instead of silently corrupting data, and makes the system more reliable and easier to maintain.</p>
+
+<h2 id="exceptions">Exception Handling <span class="tag p">PYQ ES24-2b</span><span class="tag p">PYQ ES25-3a</span><span class="tag p">PYQ EJ26-2b</span><span class="tag p">PYQ MJ26-5b</span><span class="tag l">Lab 10</span></h2>
+<p>An <b>exception</b> is an event that disrupts the normal flow of a program at runtime (dividing by zero, a missing file, a bad index). When it happens, the JVM creates an <i>exception object</i> and <b>throws</b> it. The runtime searches back up the call stack for a matching <b>handler</b> (<code>catch</code>). If none is found, the thread ends and the stack trace is printed.</p>
+<h3 id="hierarchy">Exception hierarchy</h3>
+<div class="diagram">                        Throwable
+                 ┌──────────┴───────────┐
+               Error                 Exception
+      (JVM problems: don&#x27;t catch)  ┌──────┴────────────────────┐
+   OutOfMemoryError           IOException,             RuntimeException  (UNCHECKED)
+   StackOverflowError         SQLException,            ├ ArithmeticException
+   VirtualMachineError        ClassNotFoundException,  ├ NullPointerException
+                              InterruptedException,    ├ ArrayIndexOutOfBoundsException
+                              FileNotFoundException    ├ ClassCastException
+                              (CHECKED)                ├ NumberFormatException
+                                                       └ IllegalArgumentException / IllegalStateException</div><h3 id="checked">Checked vs unchecked exceptions <span class="tag p">PYQ ES24-2b</span></h3>
+<table><tr><th>Checked</th><th>Unchecked</th></tr>
+<tr><td>Subclasses of <code>Exception</code> but not <code>RuntimeException</code></td><td><code>RuntimeException</code>, <code>Error</code> and their subclasses</td></tr>
+<tr><td>Checked by the <b>compiler</b>: you must catch or declare them with <code>throws</code></td><td>Compiler doesn't force handling</td></tr>
+<tr><td>Recoverable external conditions (file missing, network down)</td><td>Usually programming bugs (null, bad index, bad cast)</td></tr>
+<tr><td>IOException, SQLException, FileNotFoundException, InterruptedException</td><td>NullPointerException, ArithmeticException, ArrayIndexOutOfBoundsException</td></tr></table>
+<h3 id="keywords">The five keywords: try, catch, finally, throw, throws <span class="tag p">PYQ ES25-3a</span></h3>
+<table>
+<tr><td><code>try</code></td><td>Encloses code that might throw. Must be followed by catch and/or finally.</td></tr>
+<tr><td><code>catch</code></td><td>Handles a specific exception type. Order matters: put specific types before general ones. Multi-catch: <code>catch (A | B e)</code>.</td></tr>
+<tr><td><code>finally</code></td><td>Always runs, whether or not an exception occurred, even after <code>return</code>. Used for cleanup. It doesn't run only if the JVM exits (<code>System.exit</code>) or crashes.</td></tr>
+<tr><td><code>throw</code></td><td>Throws an exception object explicitly: <code>throw new IllegalArgumentException("x")</code>. Used inside a method body, one object at a time.</td></tr>
+<tr><td><code>throws</code></td><td>In a method signature: declares exceptions the method may pass to its caller: <code>void read() throws IOException, SQLException</code>.</td></tr>
+</table>
+
+<div class="box lab"><b>Lab 10: try-catch-finally + ArrayIndexOutOfBounds (ES24-2b) + multiple catch + user-defined exception (EJ26-2b)</b></div>
+<pre><code class="language-java">import java.util.Scanner;
+
+// User-defined CHECKED exception (extend RuntimeException for unchecked)
+class InsufficientBalanceException extends Exception {
+    private final double shortBy;
+    public InsufficientBalanceException(String msg, double shortBy) {
+        super(msg);
+        this.shortBy = shortBy;
+    }
+    public double getShortBy() { return shortBy; }
+}
+
+class Account {
+    private double balance = 1000;
+    // &#x27;throws&#x27; declares; &#x27;throw&#x27; raises
+    void withdraw(double amt) throws InsufficientBalanceException {
+        if (amt &gt; balance)
+            throw new InsufficientBalanceException(&quot;Balance too low&quot;, amt - balance);
+        balance -= amt;
+        System.out.println(&quot;Withdrawn &quot; + amt + &quot;, left &quot; + balance);
+    }
+}
+
+public class ExceptionDemo {
+    public static void main(String[] args) {
+        int[] arr = {10, 20, 30};
+
+        // 1. ArrayIndexOutOfBoundsException
+        try {
+            System.out.println(&quot;Accessing index 5...&quot;);
+            System.out.println(arr[5]);                       // throws
+            System.out.println(&quot;never printed&quot;);
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.out.println(&quot;Caught: &quot; + e.getMessage());
+        } finally {
+            System.out.println(&quot;finally #1 always runs&quot;);
+        }
+
+        // 2. Multiple catch blocks - most specific first
+        String[] inputs = {&quot;5&quot;, &quot;0&quot;, &quot;abc&quot;, null};
+        for (String in : inputs) {
+            try {
+                int d = Integer.parseInt(in.trim());           // NPE for null, NFE for &quot;abc&quot;
+                System.out.println(&quot;100/&quot; + d + &quot; = &quot; + (100 / d));  // ArithmeticException for 0
+            } catch (ArithmeticException e) {
+                System.out.println(&quot;Math error: &quot; + e.getMessage());
+            } catch (NumberFormatException e) {
+                System.out.println(&quot;Not a number: &quot; + in);
+            } catch (Exception e) {                            // general handler LAST
+                System.out.println(&quot;Other: &quot; + e.getClass().getSimpleName());
+            } finally {
+                System.out.println(&quot;  (finished input &quot; + in + &quot;)&quot;);
+            }
+        }
+
+        // 3. User-defined exception
+        Account acc = new Account();
+        try {
+            acc.withdraw(300);
+            acc.withdraw(900);
+        } catch (InsufficientBalanceException e) {
+            System.out.println(e.getMessage() + &quot;, short by &quot; + e.getShortBy());
+        }
+
+        // 4. try-with-resources: resource closed automatically (Java 7+)
+        try (Scanner sc = new Scanner(&quot;42&quot;)) {
+            System.out.println(&quot;Read: &quot; + sc.nextInt());
+        }
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Accessing index 5...
+Caught: Index 5 out of bounds for length 3
+finally #1 always runs
+100/5 = 20
+  (finished input 5)
+Math error: / by zero
+  (finished input 0)
+Not a number: abc
+  (finished input abc)
+Other: NullPointerException
+  (finished input null)
+Withdrawn 300.0, left 700.0
+Balance too low, short by 200.0
+Read: 42</code></pre><p><b>Program flow:</b> when a statement throws, the rest of the <code>try</code> block is skipped. The JVM checks the <code>catch</code> blocks <i>top to bottom</i> and runs the first one whose type matches (by IS-A). Then <code>finally</code> runs, and execution continues after the whole try statement. If no catch matches, finally still runs and the exception goes up to the caller. Putting <code>catch(Exception)</code> before <code>catch(ArithmeticException)</code> is a compile error (unreachable code).</p>
+<table><tr><th><code>throw</code></th><th><code>throws</code></th></tr>
+<tr><td>Raises an exception</td><td>Declares possible exceptions</td></tr>
+<tr><td>Inside a method body</td><td>In the method signature</td></tr>
+<tr><td>Followed by an instance</td><td>Followed by class names</td></tr>
+<tr><td>One at a time</td><td>Can list several, comma-separated</td></tr></table>
+<p><b>final vs finally vs finalize:</b> <code>final</code> is a keyword (constant, no override, no subclass). <code>finally</code> is the block that always runs. <code>finalize()</code> is the deprecated GC hook.</p>
+
+<h2 id="assert">Assertions <span class="tag p">PYQ ES24-3a</span><span class="tag p">PYQ MJ26-5b</span></h2>
+<p>An <b>assertion</b> is a statement of something the programmer believes is <i>always</i> true at that point. If it is false, the JVM throws an <code>AssertionError</code>. Assertions are for <b>catching bugs during development and testing</b>, not for handling expected errors.</p>
+<pre><code class="language-java">assert condition;                    // form 1
+assert condition : &quot;message expr&quot;;   // form 2 - message shown in the AssertionError</code></pre><p><b>Disabled by default.</b> Turn them on with <code>java -ea MyApp</code> (enable assertions) and off with <code>-da</code>. When disabled, they cost nothing.</p>
+<pre><code class="language-java">public class AssertDemo {
+    static int percentage(int obtained, int total) {
+        assert total &gt; 0 : &quot;total must be positive, got &quot; + total;     // precondition (private use)
+        int pct = obtained * 100 / total;
+        assert pct &gt;= 0 &amp;&amp; pct &lt;= 100 : &quot;pct out of range: &quot; + pct;  // postcondition
+        return pct;
+    }
+    public static void main(String[] args) {
+        System.out.println(percentage(45, 50));
+        System.out.println(percentage(60, 50));     // bug in data → assertion fails with -ea
+    }
+}</code></pre><pre><code class="nohighlight">$ java AssertDemo          → 90  then 120  (assertions off: bug goes unnoticed)
+$ java -ea AssertDemo      → 90  then
+Exception in thread &quot;main&quot; java.lang.AssertionError: pct out of range: 120</code></pre><p><b>Rules:</b> don't use assertions to validate public method arguments or user input, because they can be disabled. Use exceptions for that. Never put side effects inside an assert (<code>assert list.remove(x);</code> is wrong). Use them for internal invariants, "impossible" <code>default</code> branches in a switch, and pre/postconditions of private methods.</p>
+
+<h3 id="fileprocess">File processing with exceptions + assertions (MJ26-5b)</h3>
+<pre><code class="language-java">import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+
+public class UserFileReader {
+    record User(String name, int age) {}
+
+    static List&lt;User&gt; load(Path file) throws IOException {
+        List&lt;User&gt; users = new ArrayList&lt;&gt;();
+        try (BufferedReader br = Files.newBufferedReader(file)) {        // auto-close
+            String line; int lineNo = 0;
+            while ((line = br.readLine()) != null) {
+                lineNo++;
+                if (line.isBlank()) continue;
+                String[] parts = line.split(&quot;,&quot;);
+                try {
+                    if (parts.length != 2) throw new IllegalArgumentException(&quot;expected 2 fields&quot;);
+                    int age = Integer.parseInt(parts[1].trim());
+                    if (age &lt; 0 || age &gt; 150) throw new IllegalArgumentException(&quot;bad age &quot; + age);
+                    users.add(new User(parts[0].trim(), age));
+                } catch (IllegalArgumentException e) {                   // includes NumberFormatException
+                    System.err.println(&quot;Skipping line &quot; + lineNo + &quot;: &quot; + e.getMessage());
+                }
+            }
+        }
+        assert users.stream().allMatch(u -&gt; u.age() &gt;= 0) : &quot;validation bug&quot;;   // internal check
+        return users;
+    }
+
+    public static void main(String[] args) {
+        try {
+            System.out.println(load(Path.of(&quot;users.csv&quot;)));
+        } catch (NoSuchFileException e) {
+            System.out.println(&quot;File not found: &quot; + e.getFile());
+        } catch (IOException e) {
+            System.out.println(&quot;I/O failure: &quot; + e.getMessage());
+        }
+    }
+}</code></pre><p><b>Explanation:</b> <i>exceptions</i> handle conditions you expect and can recover from: a missing file, a malformed line (it is skipped and logged, and the program goes on). Try-with-resources guarantees the file is closed. The <i>assertion</i> checks the program's own logic. If it ever fires, the validation code has a bug.</p>
+
+<h2 id="collections">Collection Framework <span class="tag p">PYQ ES24-3c</span><span class="tag p">PYQ EJ26-3a</span></h2>
+<p>The <b>Java Collections Framework (JCF)</b>, in <code>java.util</code>, is a unified architecture for storing and working with groups of objects. It has three parts:</p>
+<ol><li><b>Interfaces</b>: abstract data types (Collection, List, Set, Queue, Deque, Map).</li>
+<li><b>Implementations</b>: concrete classes (ArrayList, LinkedList, HashSet, TreeSet, HashMap, PriorityQueue...).</li>
+<li><b>Algorithms</b>: static methods in <code>Collections</code> (sort, binarySearch, reverse, shuffle, max, min, frequency, unmodifiableList, synchronizedList).</li></ol>
+<p><b>Why it is important:</b> no need to write your own data structures. The implementations are fast and well tested. Code works through interfaces, so implementations can be swapped. The collections resize themselves (unlike arrays). Generics give type safety. Different APIs can pass collections to each other. Iteration, streams and sorting are already there.</p>
+<div class="diagram">                 Iterable&lt;E&gt;
+                     │
+                Collection&lt;E&gt;                               Map&lt;K,V&gt;  (not a Collection)
+     ┌───────────────┼──────────────────┐                ┌────────┼──────────┐
+   List&lt;E&gt;         Set&lt;E&gt;             Queue&lt;E&gt;         HashMap  SortedMap  Hashtable
+   │ ArrayList     │ HashSet          │ PriorityQueue     │        │
+   │ LinkedList    │ LinkedHashSet    └ Deque&lt;E&gt;       LinkedHashMap TreeMap
+   │ Vector        └ SortedSet           │ ArrayDeque
+   │  └ Stack         └ TreeSet          └ LinkedList</div><table>
+<tr><th>Implementation</th><th>Ordered?</th><th>Duplicates?</th><th>Null?</th><th>Underlying</th><th>get / add / contains</th></tr>
+<tr><td>ArrayList</td><td>Insertion, indexed</td><td>Yes</td><td>Yes</td><td>Resizable array</td><td>O(1) / O(1)* / O(n)</td></tr>
+<tr><td>LinkedList</td><td>Insertion</td><td>Yes</td><td>Yes</td><td>Doubly linked list</td><td>O(n) / O(1) at ends / O(n)</td></tr>
+<tr><td>HashSet</td><td>No order</td><td>No</td><td>One</td><td>HashMap</td><td>- / O(1) / O(1)</td></tr>
+<tr><td>LinkedHashSet</td><td>Insertion</td><td>No</td><td>One</td><td>Hash + linked list</td><td>O(1)</td></tr>
+<tr><td>TreeSet</td><td>Sorted</td><td>No</td><td>No</td><td>Red-black tree</td><td>O(log n)</td></tr>
+<tr><td>HashMap</td><td>No order</td><td>Unique keys</td><td>1 null key</td><td>Hash table of buckets</td><td>O(1)</td></tr>
+<tr><td>LinkedHashMap</td><td>Insertion</td><td>Unique keys</td><td>Yes</td><td>Hash + linked list</td><td>O(1)</td></tr>
+<tr><td>TreeMap</td><td>Sorted by key</td><td>Unique keys</td><td>No null key</td><td>Red-black tree</td><td>O(log n)</td></tr>
+<tr><td>PriorityQueue</td><td>Heap order</td><td>Yes</td><td>No</td><td>Binary heap</td><td>peek O(1), offer/poll O(log n)</td></tr>
+<tr><td>ArrayDeque</td><td>Insertion</td><td>Yes</td><td>No</td><td>Circular array</td><td>O(1) at both ends</td></tr>
+</table>
+<h3 id="alhshm">ArrayList, HashSet, HashMap demo (ES24-3c)</h3>
+<pre><code class="language-java">import java.util.*;
+
+public class CollectionsDemo {
+    public static void main(String[] args) {
+        // ArrayList: ordered, indexed, duplicates allowed
+        List&lt;String&gt; fruits = new ArrayList&lt;&gt;();
+        fruits.add(&quot;Mango&quot;); fruits.add(&quot;Apple&quot;); fruits.add(&quot;Banana&quot;); fruits.add(&quot;Apple&quot;);
+        fruits.add(1, &quot;Kiwi&quot;);                 // insert at index
+        fruits.remove(&quot;Banana&quot;);
+        System.out.println(&quot;ArrayList: &quot; + fruits + &quot; size=&quot; + fruits.size() + &quot; get(0)=&quot; + fruits.get(0));
+        Collections.sort(fruits);
+        System.out.println(&quot;Sorted:    &quot; + fruits);
+
+        // HashSet: no duplicates, no guaranteed order
+        Set&lt;String&gt; unique = new HashSet&lt;&gt;(fruits);
+        unique.add(&quot;Apple&quot;);                   // ignored, already present → add() returns false
+        System.out.println(&quot;HashSet:   &quot; + unique + &quot; contains Kiwi? &quot; + unique.contains(&quot;Kiwi&quot;));
+
+        // HashMap: key → value, keys unique
+        Map&lt;String, Integer&gt; stock = new HashMap&lt;&gt;();
+        stock.put(&quot;Apple&quot;, 50); stock.put(&quot;Mango&quot;, 20); stock.put(&quot;Apple&quot;, 75);   // overwrites
+        stock.putIfAbsent(&quot;Kiwi&quot;, 10);
+        stock.merge(&quot;Mango&quot;, 5, Integer::sum);                                    // 25
+        System.out.println(&quot;HashMap:   &quot; + stock + &quot; Apple=&quot; + stock.get(&quot;Apple&quot;));
+        for (Map.Entry&lt;String, Integer&gt; e : stock.entrySet())
+            System.out.println(&quot;  &quot; + e.getKey() + &quot; → &quot; + e.getValue());
+
+        // Iterator: safe removal while iterating
+        Iterator&lt;String&gt; it = fruits.iterator();
+        while (it.hasNext()) if (it.next().startsWith(&quot;A&quot;)) it.remove();
+        System.out.println(&quot;After removing A*: &quot; + fruits);
+    }
+}</code></pre><h3 id="hashmapint">How HashMap works internally</h3>
+<p>A HashMap holds an array of <b>buckets</b>. For <code>put(k, v)</code>: ① compute <code>k.hashCode()</code>, mix its bits, and take index = <code>hash &amp; (n-1)</code> ② if the bucket is empty, store the entry ③ otherwise walk the bucket and use <code>equals()</code> to find the same key and replace its value, or else append the entry (a <b>collision</b>). Since Java 8, a bucket with more than 8 entries turns into a red-black tree. When size exceeds <code>capacity × loadFactor (0.75)</code>, the table doubles and entries are rehashed. This is why <code>equals</code>/<code>hashCode</code> must be consistent.</p>
+
+<h3 id="empcoll">Employee storage with searching and sorting (EJ26-3a)</h3>
+<pre><code class="language-java">import java.util.*;
+import java.util.stream.*;
+
+record Employee(int id, String name, String dept, double salary) {}
+
+public class EmployeeDirectory {
+    private final Map&lt;Integer, Employee&gt; byId = new HashMap&lt;&gt;();   // O(1) lookup by id
+    private final List&lt;Employee&gt; all = new ArrayList&lt;&gt;();          // for ordering
+
+    void add(Employee e) {
+        if (byId.putIfAbsent(e.id(), e) != null) throw new IllegalArgumentException(&quot;Duplicate id &quot; + e.id());
+        all.add(e);
+    }
+    Optional&lt;Employee&gt; findById(int id) { return Optional.ofNullable(byId.get(id)); }
+    List&lt;Employee&gt; findByDept(String d) { return all.stream().filter(e -&gt; e.dept().equalsIgnoreCase(d)).toList(); }
+
+    List&lt;Employee&gt; sortedBy(Comparator&lt;Employee&gt; c) { List&lt;Employee&gt; copy = new ArrayList&lt;&gt;(all); copy.sort(c); return copy; }
+
+    int binarySearchByName(String name) {                         // list must be sorted by the same key
+        List&lt;Employee&gt; sorted = sortedBy(Comparator.comparing(Employee::name));
+        return Collections.binarySearch(sorted, new Employee(0, name, &quot;&quot;, 0), Comparator.comparing(Employee::name));
+    }
+
+    public static void main(String[] args) {
+        EmployeeDirectory d = new EmployeeDirectory();
+        d.add(new Employee(103, &quot;Ravi&quot;, &quot;IT&quot;, 65000));
+        d.add(new Employee(101, &quot;Asha&quot;, &quot;HR&quot;, 55000));
+        d.add(new Employee(102, &quot;Kiran&quot;, &quot;IT&quot;, 72000));
+        d.add(new Employee(104, &quot;Meena&quot;, &quot;Finance&quot;, 61000));
+
+        System.out.println(&quot;Find 102: &quot; + d.findById(102).map(Employee::name).orElse(&quot;none&quot;));
+        System.out.println(&quot;IT dept: &quot; + d.findByDept(&quot;it&quot;));
+        System.out.println(&quot;By salary desc:&quot;);
+        d.sortedBy(Comparator.comparingDouble(Employee::salary).reversed()).forEach(System.out::println);
+        System.out.println(&quot;Index of Meena in name-sorted list: &quot; + d.binarySearchByName(&quot;Meena&quot;));
+        Map&lt;String, Double&gt; avg = d.all.stream().collect(Collectors.groupingBy(Employee::dept, TreeMap::new,
+                Collectors.averagingDouble(Employee::salary)));
+        System.out.println(&quot;Avg salary per dept: &quot; + avg);
+    }
+}</code></pre><p><b>Why these collections:</b> a <code>HashMap</code> gives O(1) search by id. An <code>ArrayList</code> keeps the records in a sortable sequence. A <code>TreeMap</code> keeps the department report in alphabetical order.</p>
+
+<h3 id="linkedlist">Lab 8: Simple Linked List implementation <span class="tag l">Lab 8</span></h3>
+<pre><code class="language-java">public class MyLinkedList&lt;T&gt; {
+    private class Node {                       // inner node class
+        T data; Node next;
+        Node(T d) { data = d; }
+    }
+    private Node head;
+    private int size;
+
+    public void addFirst(T val) { Node n = new Node(val); n.next = head; head = n; size++; }
+
+    public void addLast(T val) {
+        Node n = new Node(val);
+        if (head == null) { head = n; }
+        else { Node cur = head; while (cur.next != null) cur = cur.next; cur.next = n; }
+        size++;
+    }
+    public void insertAt(int index, T val) {
+        if (index &lt; 0 || index &gt; size) throw new IndexOutOfBoundsException(&quot;Index: &quot; + index);
+        if (index == 0) { addFirst(val); return; }
+        Node prev = head;
+        for (int i = 0; i &lt; index - 1; i++) prev = prev.next;
+        Node n = new Node(val); n.next = prev.next; prev.next = n; size++;
+    }
+    public boolean delete(T val) {                    // delete first occurrence
+        if (head == null) return false;
+        if (head.data.equals(val)) { head = head.next; size--; return true; }
+        Node cur = head;
+        while (cur.next != null &amp;&amp; !cur.next.data.equals(val)) cur = cur.next;
+        if (cur.next == null) return false;
+        cur.next = cur.next.next;                     // unlink
+        size--; return true;
+    }
+    public boolean contains(T val) { for (Node c = head; c != null; c = c.next) if (c.data.equals(val)) return true; return false; }
+
+    public void reverse() {
+        Node prev = null, cur = head;
+        while (cur != null) { Node nxt = cur.next; cur.next = prev; prev = cur; cur = nxt; }
+        head = prev;
+    }
+    public void traverse() {
+        StringBuilder sb = new StringBuilder(&quot;[&quot;);
+        for (Node c = head; c != null; c = c.next) sb.append(c.data).append(c.next != null ? &quot; → &quot; : &quot;&quot;);
+        System.out.println(sb.append(&quot;] size=&quot;).append(size));
+    }
+    public static void main(String[] args) {
+        MyLinkedList&lt;Integer&gt; list = new MyLinkedList&lt;&gt;();
+        list.addLast(10); list.addLast(20); list.addLast(30);
+        list.addFirst(5); list.insertAt(2, 15);
+        list.traverse();
+        list.delete(20); list.traverse();
+        System.out.println(&quot;contains 30? &quot; + list.contains(30));
+        list.reverse(); list.traverse();
+
+        java.util.LinkedList&lt;String&gt; jl = new java.util.LinkedList&lt;&gt;();   // built-in version
+        jl.add(&quot;b&quot;); jl.addFirst(&quot;a&quot;); jl.addLast(&quot;c&quot;); jl.removeFirst();
+        System.out.println(jl);
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">[5 → 10 → 15 → 20 → 30] size=5
+[5 → 10 → 15 → 30] size=4
+contains 30? true
+[30 → 15 → 10 → 5] size=4
+[b, c]</code></pre>
+<h3 id="stack">Lab 9: Stack (array-based and linked-list-based) <span class="tag l">Lab 9</span></h3>
+<p>A <b>stack</b> is LIFO (Last In, First Out). Operations: <b>push</b> (add to the top), <b>pop</b> (remove the top), <b>peek</b> (look at the top), isEmpty. All are O(1).</p>
+<pre><code class="language-java">// Array implementation
+class ArrayStack {
+    private final int[] data;
+    private int top = -1;
+    ArrayStack(int capacity) { data = new int[capacity]; }
+
+    void push(int x) {
+        if (top == data.length - 1) throw new IllegalStateException(&quot;Stack Overflow&quot;);
+        data[++top] = x;
+    }
+    int pop() {
+        if (isEmpty()) throw new IllegalStateException(&quot;Stack Underflow&quot;);
+        return data[top--];
+    }
+    int peek() {
+        if (isEmpty()) throw new IllegalStateException(&quot;Stack is empty&quot;);
+        return data[top];
+    }
+    boolean isEmpty() { return top == -1; }
+    int size() { return top + 1; }
+}
+
+// Linked-list implementation (generic, unbounded)
+class LinkedStack&lt;T&gt; {
+    private static class Node&lt;T&gt; { T val; Node&lt;T&gt; next; Node(T v, Node&lt;T&gt; n){ val = v; next = n; } }
+    private Node&lt;T&gt; top; private int size;
+    void push(T x) { top = new Node&lt;&gt;(x, top); size++; }
+    T pop()  { if (top == null) throw new java.util.EmptyStackException(); T v = top.val; top = top.next; size--; return v; }
+    T peek() { if (top == null) throw new java.util.EmptyStackException(); return top.val; }
+    boolean isEmpty() { return top == null; }
+}
+
+public class StackDemo {
+    // Application: balanced brackets
+    static boolean balanced(String s) {
+        LinkedStack&lt;Character&gt; st = new LinkedStack&lt;&gt;();
+        for (char c : s.toCharArray()) {
+            if (&quot;([{&quot;.indexOf(c) &gt;= 0) st.push(c);
+            else if (&quot;)]}&quot;.indexOf(c) &gt;= 0) {
+                if (st.isEmpty()) return false;
+                char o = st.pop();
+                if (&quot;([{&quot;.indexOf(o) != &quot;)]}&quot;.indexOf(c)) return false;
+            }
+        }
+        return st.isEmpty();
+    }
+    public static void main(String[] args) {
+        ArrayStack s = new ArrayStack(3);
+        s.push(10); s.push(20); s.push(30);
+        System.out.println(&quot;peek = &quot; + s.peek());     // 30
+        System.out.println(&quot;pop  = &quot; + s.pop());      // 30
+        System.out.println(&quot;pop  = &quot; + s.pop());      // 20
+        System.out.println(&quot;size = &quot; + s.size());     // 1
+        try { s.push(1); s.push(2); s.push(3); } catch (IllegalStateException e) { System.out.println(e.getMessage()); }
+        System.out.println(balanced(&quot;{[()()]}&quot;) + &quot; &quot; + balanced(&quot;([)]&quot;));   // true false
+        // Built-in: prefer ArrayDeque over legacy java.util.Stack
+        java.util.Deque&lt;Integer&gt; dq = new java.util.ArrayDeque&lt;&gt;(); dq.push(1); dq.push(2); System.out.println(dq.pop()); // 2
+    }
+}</code></pre>
+<h2 id="io">I/O Streams <span class="tag p">PYQ ES25-1a(iii,iv)</span><span class="tag l">Lab 16</span></h2>
+<p>A <b>stream</b> is a sequence of data flowing from a <b>source</b> to a <b>destination</b>. An <b>input stream</b> reads data into the program. An <b>output stream</b> writes data out of it. The source or destination can be a file, the console, a network socket, a memory array and so on. Package: <code>java.io</code> (plus <code>java.nio.file</code> for the modern API).</p>
+<h3 id="bytechar">Byte streams vs character streams</h3>
+<table>
+<tr><th></th><th>Byte stream</th><th>Character stream</th></tr>
+<tr><td>Unit</td><td>8-bit bytes (raw binary)</td><td>16-bit Unicode characters</td></tr>
+<tr><td>Abstract base classes</td><td><code>InputStream</code>, <code>OutputStream</code></td><td><code>Reader</code>, <code>Writer</code></td></tr>
+<tr><td>Main classes</td><td>FileInputStream, FileOutputStream, BufferedInputStream, DataInputStream, ObjectInputStream</td><td>FileReader, FileWriter, BufferedReader, BufferedWriter, PrintWriter, InputStreamReader</td></tr>
+<tr><td>Use for</td><td>Images, audio, video, .class files, serialized objects</td><td>Text files (.txt, .csv, .java)</td></tr>
+<tr><td>Encoding</td><td>None</td><td>Handles charset encoding/decoding (UTF-8...)</td></tr>
+</table>
+<p><b>"Entity byte" / byte stream (ES25-1a iv):</b> a byte stream treats data as raw bytes and doesn't interpret them. <b>Character stream (iii):</b> a stream that reads and writes characters and converts bytes to chars with a charset. <code>InputStreamReader</code> and <code>OutputStreamWriter</code> are <b>bridges</b> from byte streams to character streams.</p>
+<p><b>Buffered streams</b> wrap another stream and read or write in large chunks, cutting the number of system calls. This is the <b>Decorator pattern</b>: <code>new BufferedReader(new FileReader("a.txt"))</code>.</p>
+<p><b>Standard streams:</b> <code>System.in</code> (InputStream), <code>System.out</code>, <code>System.err</code> (PrintStream).</p>
+
+<div class="box lab"><b>Lab 16: File reading and writing</b></div>
+<pre><code class="language-java">import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.List;
+
+public class FileIODemo {
+    public static void main(String[] args) {
+        String file = &quot;students.txt&quot;;
+
+        // 1. WRITE text with a character stream (BufferedWriter over FileWriter)
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {   // overwrite mode
+            bw.write(&quot;101,Asha,91&quot;); bw.newLine();
+            bw.write(&quot;102,Ravi,78&quot;); bw.newLine();
+        } catch (IOException e) { System.out.println(&quot;Write failed: &quot; + e.getMessage()); }
+
+        // 2. APPEND with PrintWriter
+        try (PrintWriter pw = new PrintWriter(new FileWriter(file, true))) {    // true = append
+            pw.printf(&quot;%d,%s,%d%n&quot;, 103, &quot;Kiran&quot;, 85);
+        } catch (IOException e) { e.printStackTrace(); }
+
+        // 3. READ line by line with BufferedReader
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line; int total = 0, n = 0;
+            while ((line = br.readLine()) != null) {
+                String[] p = line.split(&quot;,&quot;);
+                System.out.println(&quot;Roll &quot; + p[0] + &quot; → &quot; + p[1] + &quot; scored &quot; + p[2]);
+                total += Integer.parseInt(p[2]); n++;
+            }
+            System.out.println(&quot;Average = &quot; + (double) total / n);
+        } catch (FileNotFoundException e) {
+            System.out.println(&quot;File missing&quot;);
+        } catch (IOException e) { e.printStackTrace(); }
+
+        // 4. BYTE stream copy (works for any file type, e.g. images)
+        try (InputStream in = new BufferedInputStream(new FileInputStream(file));
+             OutputStream out = new BufferedOutputStream(new FileOutputStream(&quot;copy.txt&quot;))) {
+            byte[] buf = new byte[4096]; int read;
+            while ((read = in.read(buf)) != -1) out.write(buf, 0, read);
+        } catch (IOException e) { e.printStackTrace(); }
+
+        // 5. Modern NIO.2 one-liners
+        try {
+            List&lt;String&gt; lines = Files.readAllLines(Path.of(file), StandardCharsets.UTF_8);
+            Files.writeString(Path.of(&quot;summary.txt&quot;), &quot;Lines: &quot; + lines.size());
+            System.out.println(Files.readString(Path.of(&quot;summary.txt&quot;)));
+            System.out.println(&quot;Exists? &quot; + Files.exists(Path.of(&quot;copy.txt&quot;)) + &quot;, size &quot; + Files.size(Path.of(&quot;copy.txt&quot;)));
+        } catch (IOException e) { e.printStackTrace(); }
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Roll 101 → Asha scored 91
+Roll 102 → Ravi scored 78
+Roll 103 → Kiran scored 85
+Average = 84.66666666666667
+Lines: 3
+Exists? true, size 37</code></pre>
+<h2 id="serial">Object Serialization and Deserialization <span class="tag p">PYQ ES24-3a</span><span class="tag p">PYQ EJ26-3b</span></h2>
+<p><b>Serialization</b> converts an object's state into a <b>byte stream</b> so it can be saved to a file or database, or sent over a network. <b>Deserialization</b> is the reverse: rebuilding the object in memory from those bytes.</p>
+<h4>Functions and classes used (ES24-3a)</h4>
+<ul><li>The class must implement the marker interface <b><code>java.io.Serializable</code></b>.</li>
+<li><b><code>ObjectOutputStream.writeObject(Object)</code></b> serializes.</li>
+<li><b><code>ObjectInputStream.readObject()</code></b> deserializes. It returns <code>Object</code>, so you cast it, and it throws <code>ClassNotFoundException</code> and <code>IOException</code>.</li>
+<li><b><code>serialVersionUID</code></b>: a version number. If the sender's and receiver's class versions don't match, you get <code>InvalidClassException</code>.</li>
+<li><b><code>transient</code></b> fields are <i>not</i> serialized. They come back with default values (null/0). Use this for passwords, caches and derived data. <code>static</code> fields aren't serialized either, because they belong to the class.</li>
+<li>Optional hooks: <code>private void writeObject(ObjectOutputStream)</code> / <code>readObject(ObjectInputStream)</code> for custom logic, and the <code>Externalizable</code> interface for full control.</li></ul>
+<pre><code class="language-java">import java.io.*;
+
+class Address implements Serializable {             // nested objects must ALSO be Serializable
+    private static final long serialVersionUID = 1L;
+    String city; Address(String c) { city = c; }
+}
+
+class Employee implements Serializable {
+    private static final long serialVersionUID = 1L;
+    private int id;
+    private String name;
+    private double salary;
+    private Address address;                        // serialized too (object graph)
+    private transient String password;              // NOT serialized
+    static String company = &quot;Acme&quot;;                 // NOT serialized (class-level)
+
+    Employee(int id, String name, double salary, Address a, String pwd) {
+        this.id = id; this.name = name; this.salary = salary; this.address = a; this.password = pwd;
+    }
+    @Override public String toString() {
+        return id + &quot;, &quot; + name + &quot;, &quot; + salary + &quot;, &quot; + address.city + &quot;, pwd=&quot; + password;
+    }
+}
+
+public class SerializationDemo {
+    public static void main(String[] args) {
+        Employee e = new Employee(1, &quot;Asha&quot;, 75000, new Address(&quot;Delhi&quot;), &quot;secret123&quot;);
+
+        // SERIALIZE
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(&quot;emp.ser&quot;))) {
+            out.writeObject(e);
+            System.out.println(&quot;Serialized:   &quot; + e);
+        } catch (IOException ex) { ex.printStackTrace(); }
+
+        // DESERIALIZE
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(&quot;emp.ser&quot;))) {
+            Employee copy = (Employee) in.readObject();     // constructor is NOT called
+            System.out.println(&quot;Deserialized: &quot; + copy);
+            System.out.println(&quot;Same object? &quot; + (copy == e));
+        } catch (IOException | ClassNotFoundException ex) { ex.printStackTrace(); }
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Serialized:   1, Asha, 75000.0, Delhi, pwd=secret123
+Deserialized: 1, Asha, 75000.0, Delhi, pwd=null
+Same object? false</code></pre><p><b>Practical applications:</b> saving application or game state to disk; sending objects across a network (Java RMI, sockets); caching (session replication in web servers); <b>deep copying</b> (serialize, then deserialize); message queues. Modern systems often prefer JSON or Protobuf because they work across languages and are safer.<br>
+<b>Security warning:</b> deserializing untrusted data can run attacker-controlled code (gadget chains). See <a href="#defensive">defensive programming</a>.</p>
+
+<h2 id="jdbc">JDBC: Database Connectivity <span class="tag l">Lab 13</span></h2>
+<p class="sub">Not in the theory syllabus, but it is a lab experiment.</p>
+<p><b>JDBC (Java Database Connectivity)</b> is the standard API (<code>java.sql</code>) for connecting Java programs to relational databases. A database-specific <b>driver</b> (MySQL Connector/J, PostgreSQL, SQLite JDBC) implements the API.</p>
+<h4>Steps</h4>
+<ol><li>Add the driver JAR to the classpath. (Loading it with <code>Class.forName("com.mysql.cj.jdbc.Driver")</code> is optional since JDBC 4.)</li>
+<li>Open a connection: <code>DriverManager.getConnection(url, user, pass)</code>.</li>
+<li>Create a <code>Statement</code> / <code>PreparedStatement</code>.</li>
+<li>Run it: <code>executeQuery()</code> (SELECT, returns a ResultSet) or <code>executeUpdate()</code> (INSERT/UPDATE/DELETE, returns the row count).</li>
+<li>Read the <code>ResultSet</code> with <code>next()</code>, <code>getInt</code> and <code>getString</code>.</li>
+<li>Close the resources (try-with-resources).</li></ol>
+<pre><code class="language-java">import java.sql.*;
+
+public class JdbcDemo {
+    // MySQL: &quot;jdbc:mysql://localhost:3306/college&quot;   SQLite: &quot;jdbc:sqlite:college.db&quot;
+    static final String URL = &quot;jdbc:mysql://localhost:3306/college&quot;;
+    static final String USER = &quot;root&quot;, PASS = &quot;password&quot;;
+
+    public static void main(String[] args) {
+        try (Connection con = DriverManager.getConnection(URL, USER, PASS)) {
+            System.out.println(&quot;Connected to &quot; + con.getMetaData().getDatabaseProductName());
+
+            try (Statement st = con.createStatement()) {
+                st.executeUpdate(&quot;CREATE TABLE IF NOT EXISTS student (&quot; +
+                        &quot;roll INT PRIMARY KEY, name VARCHAR(50), cgpa DOUBLE)&quot;);
+                st.executeUpdate(&quot;DELETE FROM student&quot;);
+            }
+
+            // INSERT with PreparedStatement (safe from SQL injection)
+            String ins = &quot;INSERT INTO student (roll, name, cgpa) VALUES (?, ?, ?)&quot;;
+            try (PreparedStatement ps = con.prepareStatement(ins)) {
+                Object[][] rows = { {1, &quot;Asha&quot;, 9.1}, {2, &quot;Ravi&quot;, 7.8}, {3, &quot;Kiran&quot;, 8.5} };
+                for (Object[] r : rows) {
+                    ps.setInt(1, (int) r[0]); ps.setString(2, (String) r[1]); ps.setDouble(3, (double) r[2]);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+
+            // UPDATE
+            try (PreparedStatement ps = con.prepareStatement(&quot;UPDATE student SET cgpa = ? WHERE roll = ?&quot;)) {
+                ps.setDouble(1, 8.0); ps.setInt(2, 2);
+                System.out.println(&quot;Rows updated: &quot; + ps.executeUpdate());
+            }
+
+            // SELECT and retrieve results
+            try (PreparedStatement ps = con.prepareStatement(&quot;SELECT roll, name, cgpa FROM student WHERE cgpa &gt; ? ORDER BY cgpa DESC&quot;)) {
+                ps.setDouble(1, 7.5);
+                try (ResultSet rs = ps.executeQuery()) {
+                    System.out.println(&quot;Roll | Name  | CGPA&quot;);
+                    while (rs.next())
+                        System.out.printf(&quot;%4d | %-5s | %.1f%n&quot;, rs.getInt(&quot;roll&quot;), rs.getString(&quot;name&quot;), rs.getDouble(&quot;cgpa&quot;));
+                }
+            }
+
+            // Transaction
+            con.setAutoCommit(false);
+            try (Statement st = con.createStatement()) {
+                st.executeUpdate(&quot;UPDATE student SET cgpa = cgpa + 0.1 WHERE roll = 1&quot;);
+                con.commit();
+            } catch (SQLException e) { con.rollback(); throw e; }
+        } catch (SQLException e) {
+            System.out.println(&quot;DB error: &quot; + e.getMessage() + &quot; (SQLState &quot; + e.getSQLState() + &quot;)&quot;);
+        }
+    }
+}</code></pre><pre><code class="nohighlight">Compile &amp; run (MySQL):   javac JdbcDemo.java
+                         java -cp .:mysql-connector-j-8.x.jar JdbcDemo      (use ; instead of : on Windows)</code></pre><p><b>Statement vs PreparedStatement:</b> PreparedStatement is precompiled (faster when run repeatedly), takes parameters with <code>?</code>, and is <b>safe from SQL injection</b>. Always prefer it.</p>
+
+<h2 id="junit">Unit Testing using JUnit <span class="tag p">PYQ ES24-4b</span></h2>
+<p><b>Unit testing</b> tests the smallest testable parts of a program (methods, classes) <b>in isolation</b>, automatically, to check they behave as expected. <b>JUnit</b> is the standard Java framework for it. The current version is JUnit 5 (Jupiter).</p>
+<p><b>Benefits:</b> bugs are found early; refactoring is safe (regression tests); tests document intended behaviour; better design (testable code tends to be modular); fits into CI/CD pipelines; supports TDD (red → green → refactor).</p>
+<h3 id="junitarch">JUnit 5 architecture</h3>
+<div class="diagram">┌───────────────────────────────────────────────────────────────┐
+│        IDEs (IntelliJ, Eclipse) · Build tools (Maven, Gradle)  │
+│                     │ use the Launcher API                     │
+├─────────────────────▼─────────────────────────────────────────┤
+│  JUnit PLATFORM  - foundation: launches test frameworks on    │
+│  the JVM, discovers &amp; runs tests, reports results.            │
+│  (junit-platform-launcher, TestEngine API, console launcher)  │
+├───────────────┬─────────────────────┬─────────────────────────┤
+│ JUnit JUPITER │  JUnit VINTAGE      │  Third-party engines    │
+│ new API +     │  runs old JUnit 3/4 │  (Spock, Cucumber,      │
+│ engine for    │  tests on the       │   TestNG ...)           │
+│ JUnit 5 tests │  platform           │                         │
+│ (@Test, ...)  │                     │                         │
+└───────────────┴─────────────────────┴─────────────────────────┘
+JUnit 5 = JUnit Platform + JUnit Jupiter + JUnit Vintage</div><ul><li><b>JUnit Platform:</b> the foundation for launching testing frameworks. It defines the <code>TestEngine</code> API that tools and IDEs use to discover and run tests.</li>
+<li><b>JUnit Jupiter:</b> the new programming model (annotations, assertions) plus the engine that runs JUnit 5 tests.</li>
+<li><b>JUnit Vintage:</b> an engine for running legacy JUnit 3/4 tests.</li></ul>
+<p><b>Classic JUnit 4 view</b> (also accepted in exams): <i>Test Case</i> (class with @Test methods) → <i>Test Suite</i> (group of test cases) → <i>Test Runner</i> (runs them) → <i>Test Result</i> (collects pass/fail) + <i>Assert</i> (checks expected vs actual) + <i>Fixtures</i> (@Before/@After setup).</p>
+<h3 id="junitann">Annotations and assertions</h3>
+<table>
+<tr><th>JUnit 5</th><th>JUnit 4</th><th>Meaning</th></tr>
+<tr><td><code>@Test</code></td><td><code>@Test</code></td><td>Marks a test method</td></tr>
+<tr><td><code>@BeforeEach</code> / <code>@AfterEach</code></td><td><code>@Before</code> / <code>@After</code></td><td>Run before/after <i>each</i> test (fixture setup)</td></tr>
+<tr><td><code>@BeforeAll</code> / <code>@AfterAll</code></td><td><code>@BeforeClass</code> / <code>@AfterClass</code></td><td>Run once per class (static)</td></tr>
+<tr><td><code>@Disabled</code></td><td><code>@Ignore</code></td><td>Skip the test</td></tr>
+<tr><td><code>@DisplayName</code>, <code>@ParameterizedTest</code>, <code>@Nested</code>, <code>@Timeout</code>, <code>@RepeatedTest</code></td><td>-</td><td>Extras</td></tr>
+</table>
+<p><b>Assertions:</b> <code>assertEquals(expected, actual)</code>, <code>assertNotEquals</code>, <code>assertTrue / assertFalse</code>, <code>assertNull / assertNotNull</code>, <code>assertSame</code>, <code>assertArrayEquals</code>, <code>assertThrows(Ex.class, () -&gt; ...)</code>, <code>assertTimeout</code>, <code>assertAll(...)</code>.</p>
+<pre><code class="language-java">// Calculator.java - class under test
+public class Calculator {
+    public int add(int a, int b) { return a + b; }
+    public int divide(int a, int b) {
+        if (b == 0) throw new ArithmeticException(&quot;divide by zero&quot;);
+        return a / b;
+    }
+    public boolean isPrime(int n) {
+        if (n &lt; 2) return false;
+        for (int i = 2; (long) i * i &lt;= n; i++) if (n % i == 0) return false;
+        return true;
+    }
+}</code></pre><pre><code class="language-java">// CalculatorTest.java
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import static org.junit.jupiter.api.Assertions.*;
+
+class CalculatorTest {
+    private Calculator calc;
+
+    @BeforeAll static void initAll()  { System.out.println(&quot;Starting tests&quot;); }
+    @BeforeEach void setUp()          { calc = new Calculator(); }    // fresh fixture per test
+    @AfterEach  void tearDown()       { calc = null; }
+
+    @Test @DisplayName(&quot;2 + 3 = 5&quot;)
+    void testAdd() { assertEquals(5, calc.add(2, 3)); }
+
+    @Test
+    void testAddNegative() { assertEquals(-1, calc.add(2, -3), &quot;negative sum&quot;); }
+
+    @Test
+    void testDivide() {
+        assertAll(
+            () -&gt; assertEquals(2, calc.divide(10, 5)),
+            () -&gt; assertEquals(-3, calc.divide(9, -3)));
+    }
+
+    @Test
+    void testDivideByZero() {
+        ArithmeticException ex = assertThrows(ArithmeticException.class, () -&gt; calc.divide(1, 0));
+        assertEquals(&quot;divide by zero&quot;, ex.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3, 5, 7, 97})
+    void primes(int n) { assertTrue(calc.isPrime(n)); }
+
+    @Test @Disabled(&quot;not implemented yet&quot;)
+    void testSqrt() {}
+}</code></pre><p class="sub">Maven dependency: <code>org.junit.jupiter:junit-jupiter:5.10.x</code> (scope test). Run with <code>mvn test</code> or the IDE's ▶ button.</p>
+
+<h2 id="uml">Unified Modelling Language (UML) <span class="tag p">PYQ ES24-3b</span><span class="tag p">PYQ EJ26-3c</span></h2>
+<p><b>UML</b> is a standard visual language (maintained by the OMG) for specifying, visualising, constructing and documenting the design of software systems. UML 2.x has 14 diagram types in two families:</p>
+<table><tr><th>Structural (static) diagrams</th><th>Behavioural (dynamic) diagrams</th></tr>
+<tr><td>Show the <b>static structure</b>: <i>what</i> the system is made of</td><td>Show <b>dynamic behaviour</b>: <i>how</i> the system acts and changes over time</td></tr>
+<tr><td>Things and their relationships</td><td>Interactions, flows, state changes</td></tr>
+<tr><td>Class, Object, Component, Deployment, Package, Composite Structure, Profile</td><td>Use Case, Activity, State Machine, and Interaction diagrams (Sequence, Communication, Timing, Interaction Overview)</td></tr>
+<tr><td>Example: class diagram of Book, Member, Loan</td><td>Example: sequence diagram of "Member borrows a book"</td></tr></table>
+
+<h3 id="classdiag">Class diagram</h3>
+<p>Shows classes (name, attributes, operations) and their relationships. Visibility: <code>+</code> public, <code>-</code> private, <code>#</code> protected, <code>~</code> package. Multiplicity: <code>1</code>, <code>0..1</code>, <code>*</code>, <code>1..*</code>.</p>
+<div class="diagram">┌──────────────────────┐
+│       Student        │  ← class name (abstract in italics / «interface» stereotype)
+├──────────────────────┤
+│ - roll : int         │  ← attributes   visibility name : type
+│ - name : String      │
+├──────────────────────┤
+│ + getName() : String │  ← operations   visibility name(params) : return
+│ + enroll(c: Course)  │
+└──────────────────────┘
+
+Relationship arrows:
+  Inheritance (generalization)   Child ──────▷ Parent        (solid line, hollow triangle)
+  Realization (implements)       Class - - - -▷ «interface»  (dashed, hollow triangle)
+  Association                    A ────────── B   (navigable: A ───────&gt; B)
+  Aggregation                    Whole ◇────── Part
+  Composition                    Whole ◆────── Part
+  Dependency                     A - - - - - -&gt; B</div>
+<h3 id="usecase">Use case diagram</h3>
+<p>Shows <b>what the system does from the user's point of view</b>: the <b>actors</b> (stick figures, external users or systems), the <b>use cases</b> (ovals, the goals actors want to reach), the <b>system boundary</b> (a rectangle), and the relationships: association (actor — use case), <code>«include»</code> (always part of the base use case), <code>«extend»</code> (optional or conditional behaviour), and generalization.</p>
+<h4>Use case diagram: Online Shopping Website (ES24-3b)</h4>
+<div class="diagram">                ┌────────────────── Online Shopping System ──────────────────┐
+                │                                                            │
+   O            │   (Register)          (Browse / Search Products)           │
+  /|\ ──────────┼──(Login)◄─────«include»──────┐                             │
+  / \           │   (Add to Cart)              │                             │
+ Customer ──────┼──(Place Order)───«include»──►(Make Payment)───────────────┼──── O  Payment
+                │      ▲   │                      ▲                          │    /|\ Gateway
+                │      │   └─«include»─►(Login)   │«extend»                  │    / \
+                │      │                     (Apply Coupon)                  │
+                │   (Track Order)   (Cancel Order)   (Write Review)          │
+                │                                                            │
+   O            │   (Manage Products)  (Manage Inventory)  (Process Orders)  │
+  /|\ ──────────┼──(View Sales Reports) ──«include»──►(Login)                │
+  / \  Admin    │                                                            │
+                │                         (Ship Order) ──────────────────────┼──── O  Delivery
+                └────────────────────────────────────────────────────────────┘    /|\ Partner</div><p>Actors: <b>Customer</b> (primary), <b>Admin</b>, <b>Payment Gateway</b> and <b>Delivery Partner</b> (secondary, external systems). "Place Order" <i>includes</i> "Make Payment" (always). "Apply Coupon" <i>extends</i> "Make Payment" (optional). A Guest could be shown as a generalization of Customer.</p>
+
+<h3 id="seqdiag">Sequence diagram</h3>
+<p>Shows how objects <b>interact over time</b>. <b>Lifelines</b> are vertical dashed lines, one per object. <b>Messages</b> are horizontal arrows: a solid arrowhead for a synchronous call, an open arrowhead for asynchronous, and a dashed arrow for a return. <b>Activation bars</b> show when an object is active. <b>Combined fragments</b> (<code>alt</code>, <code>opt</code>, <code>loop</code>) show conditions and repetition. Time flows downward.</p>
+<div class="diagram"> Customer        :ShopUI          :OrderService      :Inventory      :PaymentGateway
+    │ placeOrder()   │                  │                 │                 │
+    │───────────────▶│ createOrder(cart)│                 │                 │
+    │                │─────────────────▶│ checkStock()    │                 │
+    │                │                  │────────────────▶│                 │
+    │                │                  │◀ - - inStock - -│                 │
+    │                │                  │ pay(amount)                       │
+    │                │                  │──────────────────────────────────▶│
+    │                │                  │◀ - - - - - - - success - - - - - -│
+    │                │                  │ reserve(items)  │                 │
+    │                │                  │────────────────▶│                 │
+    │                │◀ - - orderId - - │                 │                 │
+    │◀ - confirmation│                  │                 │                 │
+  ┌─┴─ alt [payment failed] ─────────────────────────────────────────────────┐
+  │   OrderService → ShopUI : paymentError ;  ShopUI → Customer : show retry │
+  └──────────────────────────────────────────────────────────────────────────┘</div>
+<h3 id="hospital">Hospital Management System: use case and class diagram (EJ26-3c)</h3>
+<p><b>Actors:</b> Patient, Doctor, Receptionist, Admin (and Payment/Insurance system as a secondary actor).</p>
+<div class="diagram">                  ┌───────────────── Hospital Management System ────────────────┐
+   O              │                                                             │
+  /|\ ────────────┼── (Register Patient)                                        │
+  / \ Patient ────┼── (Book Appointment) ──«include»──▶ (Check Doctor Availability)
+       │  ────────┼── (Cancel Appointment)                                      │
+       │  ────────┼── (View Prescription / Reports)                             │
+       │  ────────┼── (Pay Bill) ◀──«extend»── (Apply Insurance)  ──────────────┼── O Insurance
+   O   │          │                                                             │  /|\ System
+  /|\ ─┼──────────┼── (View Appointments)                                       │
+  / \  │ Doctor ──┼── (Diagnose &amp; Write Prescription)                           │
+       │  ────────┼── (Update Medical Record)                                   │
+   O              │                                                             │
+  /|\ ────────────┼── (Book Appointment on behalf)  (Generate Bill)             │
+  / \ Receptionist│                                                             │
+   O  ────────────┼── (Manage Doctors)  (Manage Departments)  (View Reports)    │
+  /|\ Admin       │        all of the above «include» (Login)                   │
+                  └─────────────────────────────────────────────────────────────┘</div><div class="diagram">                         ┌────────────────┐
+                         │ «abstract»     │
+                         │ Person         │
+                         ├────────────────┤
+                         │ # id: int      │
+                         │ # name: String │
+                         │ # phone: String│
+                         └───────▲────────┘
+              ┌──────────────────┼───────────────────┐
+     ┌────────┴────────┐ ┌───────┴────────┐ ┌────────┴────────┐
+     │ Patient         │ │ Doctor         │ │ Receptionist    │
+     ├─────────────────┤ ├────────────────┤ ├─────────────────┤
+     │ - bloodGroup    │ │ - specialization│ │ + bookFor(p,d,t)│
+     │ + book(d, slot) │ │ - fee: double  │ └─────────────────┘
+     └─┬──────┬────────┘ │ + isFree(slot) │
+       │1     │1         └───┬───────┬────┘
+       │      │ 0..*         │1      │ *  belongs to
+       │ ◆    │              │       ▼ 1
+       │ │ ┌──┴──────────────┴──┐  ┌──────────────┐
+       │ │ │ Appointment        │  │ Department   │◆─── Hospital (1) ─◆ Department (*)
+       │ │ ├────────────────────┤  └──────────────┘
+       │ │ │ - id, dateTime     │
+       │ │ │ - status: Status   │1 ────────── 0..1 ┌──────────────┐
+       │ │ │ + cancel()         │                  │ Prescription │
+       │ │ └────────────────────┘                  └──────────────┘
+       │ ▼ 1
+     ┌─┴──────────────┐          ┌─────────────┐
+     │ MedicalRecord  │          │ Bill        │ Patient 1 ──── * Bill
+     └────────────────┘          └─────────────┘</div><ul>
+<li><b>Generalization:</b> Patient, Doctor and Receptionist <i>extend</i> Person.</li>
+<li><b>Association (with a class):</b> Patient (1) —— (0..*) Appointment (0..*) —— (1) Doctor. Appointment links the patient and the doctor.</li>
+<li><b>Composition:</b> Patient ◆— MedicalRecord (a record has no meaning without its patient). Hospital ◆— Department.</li>
+<li><b>Aggregation:</b> Department ◇— Doctor (a doctor can move to another department).</li>
+<li><b>Association:</b> Appointment (1) — (0..1) Prescription. Patient (1) — (*) Bill.</li>
+</ul>
+<pre><code class="language-java">// Skeleton in code (shows how the diagram maps to classes)
+enum Status { BOOKED, COMPLETED, CANCELLED }
+abstract class Person { protected int id; protected String name; }
+class Doctor extends Person {
+    String specialization; Set&lt;LocalDateTime&gt; booked = new HashSet&lt;&gt;();
+    boolean isFree(LocalDateTime t) { return !booked.contains(t); }
+}
+class Patient extends Person {
+    private final MedicalRecord record = new MedicalRecord();      // composition
+    List&lt;Appointment&gt; appointments = new ArrayList&lt;&gt;();            // association
+    Appointment book(Doctor d, LocalDateTime t) {
+        if (!d.isFree(t)) throw new IllegalStateException(&quot;Slot taken&quot;);
+        Appointment a = new Appointment(this, d, t);
+        d.booked.add(t); appointments.add(a); return a;
+    }
+}
+class Appointment {
+    final Patient patient; final Doctor doctor; final LocalDateTime time; Status status = Status.BOOKED;
+    Appointment(Patient p, Doctor d, LocalDateTime t) { patient = p; doctor = d; time = t; }
+}
+class MedicalRecord { List&lt;String&gt; entries = new ArrayList&lt;&gt;(); }</code></pre></main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>

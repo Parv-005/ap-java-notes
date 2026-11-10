@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Practicals</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Lab Experiments (Practical Syllabus)</h1>
+<p class="sub">Each experiment is solved in full inside the relevant unit, next to the theory it belongs to. Click to jump there.</p>
+<table>
+<tr><th>#</th><th>Experiment</th><th>Where solved</th><th>Key concepts</th></tr>
+<tr><td>1</td><td>Basic Arithmetic: calculator (+ − × ÷)</td><td><a href="unit0.html#control">Java Basics → Lab 1</a></td><td>Scanner, switch, division by zero, exceptions</td></tr>
+<tr><td>2</td><td>Control structures: if, else, switch, for, while, do-while</td><td><a href="unit0.html#control">Java Basics → Lab 2</a></td><td>Entry vs exit controlled loops, break/continue, switch expressions</td></tr>
+<tr><td>3</td><td>Class <code>Car</code> (model, year, price), instantiate objects</td><td><a href="unit1.html#constructors">Unit 1 → Constructors</a></td><td>Fields, constructors, overloading, <code>this()</code>, static counter</td></tr>
+<tr><td>4</td><td>Inheritance: Animal → Dog, Cat</td><td><a href="unit1.html#inheritance">Unit 1 → Inheritance</a></td><td><code>extends</code>, <code>super</code>, overriding, upcasting</td></tr>
+<tr><td>5</td><td>Polymorphism: Shape → Circle, Square, Triangle (overriding + overloading)</td><td><a href="unit2.html#poly">Unit 2 → Polymorphism</a></td><td>Dynamic dispatch, overload resolution</td></tr>
+<tr><td>6</td><td>Encapsulation: Student with private fields, getters and setters</td><td><a href="unit1.html#encap">Unit 1 → Encapsulation</a></td><td>Data hiding, validation in setters</td></tr>
+<tr><td>7</td><td>Abstraction: abstract classes + interfaces as contracts</td><td><a href="unit2.html#abstract">Unit 2 → Abstract classes</a> · <a href="unit2.html#absvsif">Payroll example</a></td><td>abstract methods, interfaces, template</td></tr>
+<tr><td>8</td><td>Linked list: insertion, deletion, traversal</td><td><a href="unit3.html#linkedlist">Unit 3 → Lab 8</a></td><td>Nodes, generics, reverse</td></tr>
+<tr><td>9</td><td>Stack: push, pop, peek (array and linked list)</td><td><a href="unit3.html#stack">Unit 3 → Lab 9</a></td><td>LIFO, overflow/underflow, bracket matching</td></tr>
+<tr><td colspan="4" style="text-align:center"><b>Mid-Semester Evaluation</b></td></tr>
+<tr><td>10</td><td>try-catch-finally exception handling</td><td><a href="unit3.html#exceptions">Unit 3 → Lab 10</a></td><td>Multiple catch, finally, user-defined exception, try-with-resources</td></tr>
+<tr><td>11</td><td>Thread creation with Thread class and Runnable</td><td><a href="unit4.html#create">Unit 4 → Lab 11</a></td><td>start vs run, join, lambdas</td></tr>
+<tr><td>12</td><td>Thread synchronization: synchronized + wait/notify</td><td><a href="unit5.html#mutex">Unit 5 → synchronized</a> · <a href="unit5.html#waitnotify">wait/notify (odd-even)</a></td><td>Monitors, race conditions, inter-thread communication</td></tr>
+<tr><td>13</td><td>JDBC: connect, run SQL, get results</td><td><a href="unit3.html#jdbc">Unit 3 → JDBC</a></td><td>DriverManager, PreparedStatement, ResultSet, transactions</td></tr>
+<tr><td>14</td><td>Design patterns: Singleton, Factory, Observer</td><td><a href="unit5.html#singleton">Singleton</a> · <a href="unit5.html#factory">Factory</a> · <a href="unit5.html#observer">Observer</a></td><td>Creational and behavioural patterns</td></tr>
+<tr><td>15</td><td>Producer-Consumer problem</td><td><a href="unit5.html#pc">Unit 5 → Producer-Consumer</a></td><td>wait/notifyAll and BlockingQueue solutions</td></tr>
+<tr><td>16</td><td>File reading and writing</td><td><a href="unit3.html#io">Unit 3 → Lab 16</a></td><td>BufferedReader/Writer, byte streams, NIO Files</td></tr>
+</table>
+
+<h2>Running the programs</h2>
+<pre><code class="nohighlight"># Compile &amp; run a single file (Java 11+ can even skip javac):
+javac Calculator.java &amp;&amp; java Calculator
+java Calculator.java
+
+# Enable assertions
+java -ea AssertDemo
+
+# JavaFX (download the OpenJFX SDK)
+javac --module-path /path/to/javafx-sdk/lib --add-modules javafx.controls KeyEventDemo.java
+java  --module-path /path/to/javafx-sdk/lib --add-modules javafx.controls KeyEventDemo
+
+# JDBC with MySQL / SQLite driver
+java -cp .:mysql-connector-j.jar JdbcDemo
+java -cp .:sqlite-jdbc.jar JdbcDemo        # URL &quot;jdbc:sqlite:college.db&quot; - no server needed</code></pre><div class="box tip"><b>Viva tips</b>Be ready to explain: why a constructor has no return type · <code>start()</code> vs <code>run()</code> · why <code>wait()</code> goes inside a <code>while</code> loop · why PreparedStatement is safer than Statement · why the Singleton constructor is private · what happens if <code>notify()</code> is called outside synchronized code (IllegalMonitorStateException) · array vs linked-list stack trade-offs.</div>
+</main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>

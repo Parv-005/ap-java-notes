@@ -1,0 +1,67 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Revision</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Quick Revision Sheet</h1>
+<p class="sub">The night before the exam. Every line links back to a full explanation in the units.</p>
+
+<h2>Formulas</h2>
+<table>
+<tr><td>Speedup</td><td><b>S = T<sub>1</sub> / T<sub>p</sub></b></td></tr>
+<tr><td>Efficiency</td><td><b>E = S / p</b></td></tr>
+<tr><td>Amdahl</td><td><b>S = 1 / [(1−P) + P/N]</b>, S<sub>max</sub> = 1/(1−P)</td></tr>
+<tr><td>Gustafson</td><td>S = (1−P) + P·N</td></tr>
+<tr><td>80% on 4 cores</td><td>S = 2.5, E = 62.5%, max 5×</td></tr>
+<tr><td>75% on 4 cores</td><td>S ≈ 2.29, E ≈ 57.1%, max 4×</td></tr>
+<tr><td>Pool size</td><td>CPU-bound ≈ cores; I/O-bound ≈ cores × (1 + wait/compute)</td></tr>
+</table>
+
+<h2>Must-know one-liners</h2>
+<ul>
+<li><b>JVM</b> runs bytecode · <b>JRE</b> = JVM + libraries · <b>JDK</b> = JRE + tools. Bytecode is platform independent, the JVM is not.</li>
+<li>Java is <b>always pass-by-value</b>. For objects, the reference is copied.</li>
+<li>Widening is automatic, narrowing needs a <code>(cast)</code>.</li>
+<li>Four pillars: <b>Encapsulation, Abstraction, Inheritance, Polymorphism</b>.</li>
+<li>Dependency (uses, - - -&gt;) &lt; Association (knows, ──) &lt; Aggregation (◇, part survives) &lt; Composition (◆, part dies).</li>
+<li>Constructor: same name, no return type, not inherited. The default one is added only if none is written. <code>this()</code>/<code>super()</code> must come first.</li>
+<li>Constructors run <b>top-down</b> (Object → … → child). Methods resolve <b>bottom-up</b> (child → … → Object).</li>
+<li>Overloading = same name, different params, compile time. Overriding = same signature, subclass, runtime.</li>
+<li>static, private and final methods and fields are <b>not</b> dynamically dispatched.</li>
+<li><code>abstract</code> can't combine with <code>private</code>, <code>final</code> or <code>static</code>.</li>
+<li>Interface: fields are <code>public static final</code>. Default, static (Java 8) and private (Java 9) methods are allowed. A class can implement many.</li>
+<li>Immutable: final class, private final fields, no setters, defensive copies in and out.</li>
+<li><code>==</code> compares references, <code>equals()</code> compares content. Override <b>hashCode</b> together with equals.</li>
+<li>Comparable: <code>compareTo(o)</code>, one natural order, inside the class, java.lang. Comparator: <code>compare(a,b)</code>, many orders, outside the class, java.util.</li>
+<li><code>clone()</code>: needs Cloneable, shallow by default, doesn't call a constructor.</li>
+<li>Checked = compiler forces handling (IOException). Unchecked = RuntimeException (NPE, AIOOBE).</li>
+<li><code>finally</code> always runs except on System.exit or a JVM crash. Catch specific types before general ones.</li>
+<li><code>assert</code> is off by default. Enable with <code>java -ea</code>. Don't use it for public argument checks.</li>
+<li>Serialization: <code>Serializable</code>, <code>writeObject</code>/<code>readObject</code>. <code>transient</code> and <code>static</code> fields are skipped. Keep a <code>serialVersionUID</code>.</li>
+<li>Byte streams: InputStream/OutputStream (binary). Character streams: Reader/Writer (text, Unicode).</li>
+<li>JUnit 5 = Platform + Jupiter + Vintage. Key annotations: @Test, @BeforeEach, @AfterEach, @BeforeAll, @AfterAll, @Disabled.</li>
+<li>UML structural (class, object, component, deployment, package) vs behavioural (use case, sequence, activity, state).</li>
+<li>JavaFX: Stage → Scene → Nodes. Event phases: target selection → route construction → <b>capturing</b> (filters) → <b>bubbling</b> (handlers).</li>
+<li>Thread states: NEW, RUNNABLE, BLOCKED, WAITING, TIMED_WAITING, TERMINATED.</li>
+<li><code>start()</code> creates a new thread. <code>run()</code> is a normal method call.</li>
+<li>Prefer Runnable over extending Thread, and prefer ExecutorService over both.</li>
+<li>Pool steps: create → submit → get results → shutdown. Risks: deadlock, leakage, thrashing, unbounded queue.</li>
+<li>Granularity: fine = more overhead but better balance. Coarse = less overhead but load imbalance. Aim for a few tasks per core.</li>
+<li>Race condition = shared mutable data + concurrent access + at least one write. <code>count++</code> isn't atomic.</li>
+<li>Every object has a monitor. <code>synchronized</code> acquires it. It is reentrant and released automatically.</li>
+<li><code>wait()</code> releases the lock (Object method, call it inside a <code>while</code>). <code>sleep()</code> keeps the lock.</li>
+<li>Deadlock (Coffman): mutual exclusion, hold and wait, no preemption, circular wait. Fix with lock ordering.</li>
+<li><code>volatile</code> gives visibility and ordering, but not atomicity. Happens-before: unlock → lock, volatile write → read, start, join.</li>
+<li>Creational: Singleton, Factory, Prototype · Structural: Adapter, Decorator, Facade, Composite, Proxy, Flyweight · Behavioural: Iterator, Strategy, Template, Observer, State, Chain of Responsibility.</li>
+</ul>
+
+<h2>Answer-writing template for 5-mark questions</h2>
+<ol><li><b>Definition</b> (1–2 lines, use the keywords).</li>
+<li><b>Diagram or table</b>, especially for "differentiate" questions (5–6 rows).</li>
+<li><b>Code</b>: a short, complete program with comments.</li>
+<li><b>Output</b> and a 2-line explanation of the output.</li>
+<li><b>Advantages / applications</b> (3–4 bullets).</li></ol>
+</main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>

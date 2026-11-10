@@ -1,0 +1,472 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit 4 · Events & Threads</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Unit 4: Event-Driven Programming and Multithreading</h1>
+<p class="sub">JavaFX events · multithreading · Amdahl's law · speedup · efficiency · Thread vs Runnable · client-server · ExecutorService · ForkJoinPool · task granularity</p>
+
+<h2 id="edp">Event-Driven Programming with JavaFX <span class="tag p">PYQ ES25-4a</span><span class="tag p">PYQ ES24-2a</span></h2>
+<p>In <b>event-driven programming</b>, the program's flow is decided by <b>events</b>: user actions (clicks, key presses, mouse moves), sensor outputs, messages, or timers. The program registers <b>event handlers</b> (callbacks) and then waits in an <b>event loop</b>. When an event happens, the matching handler runs.</p>
+<table><tr><th>Procedure-oriented</th><th>Event-driven</th></tr>
+<tr><td>Program controls the flow: step 1, 2, 3…</td><td><b>User or environment</b> controls the flow</td></tr>
+<tr><td>Sequential, runs top to bottom and ends</td><td>Waits in an event loop and reacts to events in any order</td></tr>
+<tr><td>Input is requested at fixed points (<code>scanner.nextInt()</code>)</td><td>Input arrives any time, asynchronously</td></tr>
+<tr><td>Typical for batch / CLI programs</td><td>Typical for GUIs, games, servers, IoT</td></tr>
+<tr><td>Main components: functions</td><td>Main components: event sources, events, listeners/handlers, dispatcher</td></tr></table>
+
+<h3 id="fxbasics">JavaFX application structure</h3>
+<div class="diagram">Stage (window)  ──contains──▶  Scene  ──contains──▶  Scene graph (tree of Nodes)
+                                                    Root (e.g. VBox / BorderPane)
+                                                     ├── Label
+                                                     ├── TextField
+                                                     └── Button</div><ul><li>Extend <code>javafx.application.Application</code> and override <code>start(Stage)</code>. <code>launch(args)</code> starts the <b>JavaFX Application Thread</b>, which runs the event loop.</li>
+<li>Life cycle: <code>init()</code> → <code>start(Stage)</code> → (event loop) → <code>stop()</code>.</li>
+<li><b>Event delegation model:</b> an <i>event source</i> (a Button) creates an <i>event object</i> (<code>ActionEvent</code>) and sends it to registered <i>handlers</i> (<code>EventHandler&lt;T&gt;</code>, a functional interface with <code>handle(T event)</code>).</li>
+<li>Common events: <code>ActionEvent</code> (button, menu, Enter in a TextField), <code>MouseEvent</code>, <code>KeyEvent</code>, <code>WindowEvent</code>, <code>ScrollEvent</code>, <code>DragEvent</code>.</li></ul>
+
+<h3 id="phases">Phases of event handling in JavaFX <span class="tag p">PYQ ES24-2a</span></h3>
+<p>When an event happens, it goes through 4 phases:</p>
+<ol>
+<li><b>Target selection:</b> the system decides which node is the target (the node under the mouse, or the focused node for key events).</li>
+<li><b>Route construction:</b> the <i>event dispatch chain</i> is built: the path from the Stage down to the target (Stage → Scene → root → … → target).</li>
+<li><b>Event capturing phase:</b> the event travels <b>down</b> the chain from the Stage to the target. <b>Event filters</b> (<code>addEventFilter</code>) run in this phase. A parent can intercept the event early, and <code>event.consume()</code> stops it.</li>
+<li><b>Event bubbling phase:</b> the event travels back <b>up</b> from the target to the Stage. <b>Event handlers</b> (<code>addEventHandler</code>, <code>setOnXxx</code>) run in this phase.</li>
+</ol>
+<div class="diagram">          Stage                    ▲
+   CAPTURING │  filters            │ handlers   BUBBLING
+          Scene                    │
+             │                     │
+          VBox (root)              │
+             │                     │
+             ▼                     │
+          Button (target) ─────────┘</div><p><b>Simple event-handling model (older AWT/Swing-style answer):</b> ① an event source generates an event ② the event object is created ③ it is passed to registered listeners ④ the listener method handles it.</p>
+
+<h3 id="keyboard">Example: event handling for keyboard and mouse (ES25-4a)</h3>
+<pre><code class="language-java">import javafx.application.Application;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.input.*;
+import javafx.scene.layout.VBox;
+import javafx.scene.shape.Circle;
+import javafx.stage.Stage;
+
+public class KeyEventDemo extends Application {
+    @Override
+    public void start(Stage stage) {
+        Label info = new Label(&quot;Press arrow keys to move the circle, type in the box&quot;);
+        TextField input = new TextField();
+        Label echo = new Label();
+        Button btn = new Button(&quot;Reset&quot;);
+        Circle ball = new Circle(20);
+
+        // 1. Button: ActionEvent via lambda (EventHandler&lt;ActionEvent&gt;)
+        btn.setOnAction(e -&gt; { ball.setTranslateX(0); ball.setTranslateY(0); echo.setText(&quot;Reset!&quot;); });
+
+        // 2. KeyEvent on a TextField - KEY_TYPED gives the character
+        input.setOnKeyTyped(e -&gt; echo.setText(&quot;Typed: &quot; + input.getText() + e.getCharacter()));
+
+        VBox root = new VBox(10, info, input, echo, btn, ball);
+        Scene scene = new Scene(root, 400, 300);
+
+        // 3. KeyEvent on the Scene - KEY_PRESSED gives a KeyCode (handler = bubbling phase)
+        scene.setOnKeyPressed(e -&gt; {
+            switch (e.getCode()) {
+                case UP    -&gt; ball.setTranslateY(ball.getTranslateY() - 10);
+                case DOWN  -&gt; ball.setTranslateY(ball.getTranslateY() + 10);
+                case LEFT  -&gt; ball.setTranslateX(ball.getTranslateX() - 10);
+                case RIGHT -&gt; ball.setTranslateX(ball.getTranslateX() + 10);
+                default -&gt; {}
+            }
+            if (e.isControlDown() &amp;&amp; e.getCode() == KeyCode.Q) stage.close();   // Ctrl+Q
+        });
+
+        // 4. Event FILTER on root (capturing phase) - block digits before they reach the TextField
+        root.addEventFilter(KeyEvent.KEY_TYPED, e -&gt; {
+            if (e.getCharacter().matches(&quot;[0-9]&quot;)) e.consume();
+        });
+
+        // 5. Mouse event
+        ball.setOnMouseClicked(e -&gt; echo.setText(&quot;Ball clicked at &quot; + e.getX() + &quot;,&quot; + e.getY()));
+
+        stage.setTitle(&quot;Keyboard Events&quot;);
+        stage.setScene(scene);
+        stage.show();
+    }
+    public static void main(String[] args) { launch(args); }
+}</code></pre><p><b>Procedure for keyboard event handling:</b> ① pick the source (a focused node or the scene) ② choose the event type: <code>KEY_PRESSED</code> (any key down, gives <code>getCode()</code>), <code>KEY_RELEASED</code>, or <code>KEY_TYPED</code> (a character was produced, gives <code>getCharacter()</code>) ③ register a handler with <code>setOnKeyPressed</code> or <code>addEventHandler</code> ④ inside <code>handle()</code>, check the key and modifiers (<code>isShiftDown</code>, <code>isControlDown</code>) and update the UI ⑤ optionally <code>consume()</code> the event.</p>
+<div class="box warn"><b>Threading rule</b>The UI may only be changed on the <b>JavaFX Application Thread</b>. Run long work on a background thread or <code>Task</code>, and send UI updates back with <code>Platform.runLater(() -&gt; label.setText(...))</code>. Otherwise the UI freezes.</div>
+
+<h2 id="mt">Introduction to Multithreading <span class="tag p">PYQ EJ26-4a</span></h2>
+<p>A <b>process</b> is a running program with its own memory space. A <b>thread</b> is the smallest unit of execution <i>inside</i> a process. A process can have many threads, which <b>share the heap</b> (objects, static data) while each has its <b>own stack</b> and program counter. <b>Multithreading</b> means running several threads concurrently in one program.</p>
+<table><tr><th>Process</th><th>Thread</th></tr>
+<tr><td>Heavyweight, separate address space</td><td>Lightweight, shares the process's memory</td></tr>
+<tr><td>Inter-process communication is expensive (pipes, sockets)</td><td>Communicates through shared objects (cheap but needs synchronisation)</td></tr>
+<tr><td>Context switch is costly</td><td>Context switch is cheaper</td></tr>
+<tr><td>A crash doesn't affect other processes</td><td>An unhandled error can affect the whole process</td></tr></table>
+<p><b>Concurrency</b> means making progress on several tasks over the same period (interleaving, possible on 1 core). <b>Parallelism</b> means tasks run at the <i>same instant</i> on multiple cores.</p>
+<p><b>Benefits:</b> responsiveness (the UI stays alive), using multiple cores (performance), better throughput for I/O-bound work (one thread waits while another computes), and simpler modelling of independent activities (one thread per client). <b>Costs:</b> race conditions, deadlocks, harder debugging, and context-switch overhead.</p>
+
+<h3 id="lifecycle">Thread life cycle (states) <span class="tag p">PYQ EJ26-4a</span></h3>
+<div class="diagram">                start()                 scheduler picks
+   ┌─────┐  ─────────▶ ┌──────────┐ ◀──────────────────▶ (running on CPU)
+   │ NEW │             │ RUNNABLE │   yield()/time-slice      │
+   └─────┘             └──────────┘                           │
+                         ▲   ▲   ▲                            │ run() ends / exception
+       lock acquired     │   │   │ notify()/notifyAll()/      ▼
+   ┌──────────┐ ─────────┘   │   │ join target ends     ┌────────────┐
+   │ BLOCKED  │ ◀─────────── │   │ / interrupt          │ TERMINATED │
+   └──────────┘  waiting for │  ┌┴──────────┐           └────────────┘
+     a monitor  synchronized │  │ WAITING   │ ◀── wait(), join(), LockSupport.park()
+                             │  └───────────┘
+                             │  ┌───────────────┐
+                             └──│ TIMED_WAITING │ ◀── sleep(ms), wait(ms), join(ms)
+                     timeout    └───────────────┘</div><table>
+<tr><th>State (<code>Thread.State</code>)</th><th>Meaning</th></tr>
+<tr><td>NEW</td><td>Thread object created, <code>start()</code> not yet called</td></tr>
+<tr><td>RUNNABLE</td><td>Ready to run or running. The OS scheduler decides which. Java doesn't separate "ready" from "running".</td></tr>
+<tr><td>BLOCKED</td><td>Waiting to get a monitor lock (entering a <code>synchronized</code> block)</td></tr>
+<tr><td>WAITING</td><td>Waiting indefinitely for another thread: <code>wait()</code>, <code>join()</code></td></tr>
+<tr><td>TIMED_WAITING</td><td>Waiting with a timeout: <code>sleep(ms)</code>, <code>wait(ms)</code>, <code>join(ms)</code></td></tr>
+<tr><td>TERMINATED</td><td><code>run()</code> finished or threw an exception. It can't be restarted.</td></tr>
+</table>
+<p>Useful methods: <code>start()</code>, <code>run()</code>, <code>sleep(ms)</code>, <code>join()</code>, <code>yield()</code>, <code>interrupt()</code>, <code>isAlive()</code>, <code>setPriority(1..10)</code>, <code>setDaemon(true)</code>, <code>getName()</code>, <code>Thread.currentThread()</code>.</p>
+
+<h2 id="amdahl">Amdahl's Law, Speedup and Parallel Efficiency <span class="tag p">PYQ ES24-4c</span><span class="tag p">PYQ ES25-4c</span><span class="tag p">PYQ EJ26-4b</span></h2>
+<h3 id="speedup">Speedup</h3>
+<p><b>Speedup</b> measures how much faster a parallel program runs compared with the sequential one:</p>
+<p style="text-align:center;font-size:1.15em"><b>S(p) = T<sub>1</sub> / T<sub>p</sub></b></p>
+<p>where T<sub>1</sub> is the time on 1 processor and T<sub>p</sub> is the time on p processors. <b>Ideal (linear) speedup</b> is S(p) = p. In practice S(p) &lt; p because of serial parts, communication, synchronisation and load imbalance. Super-linear speedup (&gt; p) sometimes happens thanks to cache effects.</p>
+<h3 id="efficiency">Parallel efficiency</h3>
+<p style="text-align:center;font-size:1.15em"><b>E(p) = S(p) / p</b> &nbsp; (0 &lt; E ≤ 1, often shown as a %)</p>
+<p>It measures how well the processors are used. E = 1 (100%) means every processor did useful work all the time.</p>
+<h3 id="amdahllaw">Amdahl's Law</h3>
+<p>Amdahl's Law (Gene Amdahl, 1967) gives the <b>maximum possible speedup</b> of a program when only a fraction of it can be parallelised. If <b>P</b> is the parallelisable fraction and <b>(1 − P)</b> the serial fraction, then on <b>N</b> processors:</p>
+<p style="text-align:center;font-size:1.25em"><b>S(N) = 1 / [ (1 − P) + P / N ]</b></p>
+<p><b>Upper limit:</b> as N → ∞, P/N → 0, so <b>S<sub>max</sub> = 1 / (1 − P)</b>. The serial part puts a hard ceiling on speedup no matter how many processors you add. With 95% parallel code, you can never go faster than 20×.</p>
+<p><b>Derivation:</b> say T<sub>1</sub> = 1. The serial part takes (1−P) on any number of processors. The parallel part P is split across N processors and takes P/N. So T<sub>N</sub> = (1−P) + P/N, and S = T<sub>1</sub>/T<sub>N</sub>.</p>
+
+<div class="box pyq"><b>Worked example 1 (ES24-4c): P = 80% = 0.8, N = 4</b>
+S = 1 / [(1 − 0.8) + 0.8/4] = 1 / [0.2 + 0.2] = 1 / 0.4 = <b>2.5</b><br>
+Efficiency E = S / N = 2.5 / 4 = <b>0.625 = 62.5%</b><br>
+Maximum speedup with infinite processors = 1 / 0.2 = <b>5×</b>.</div>
+
+<div class="box pyq"><b>Worked example 2 (EJ26-4b): P = 75% = 0.75, N = 4</b>
+S = 1 / [0.25 + 0.75/4] = 1 / [0.25 + 0.1875] = 1 / 0.4375 = <b>2.286 ≈ 2.29</b><br>
+E = 2.286 / 4 = <b>0.571 ≈ 57.1%</b><br>
+<b>Interpretation:</b> even with 4 processors the program is only about 2.3× faster, not 4×. Each processor does useful work only about 57% of the time, because the 25% serial part keeps 3 of the 4 cores idle while it runs. The ceiling is 1/0.25 = 4× even with infinitely many processors. To improve, <b>reduce the serial fraction</b> rather than adding cores.</div>
+
+<table><tr><th>P (parallel)</th><th>N=2</th><th>N=4</th><th>N=8</th><th>N=16</th><th>N→∞</th></tr>
+<tr><td>50%</td><td>1.33</td><td>1.60</td><td>1.78</td><td>1.88</td><td>2</td></tr>
+<tr><td>75%</td><td>1.60</td><td>2.29</td><td>2.91</td><td>3.37</td><td>4</td></tr>
+<tr><td>80%</td><td>1.67</td><td>2.50</td><td>3.33</td><td>4.00</td><td>5</td></tr>
+<tr><td>90%</td><td>1.82</td><td>3.08</td><td>4.71</td><td>6.40</td><td>10</td></tr>
+<tr><td>95%</td><td>1.90</td><td>3.48</td><td>5.93</td><td>9.14</td><td>20</td></tr></table>
+<p><b>How Amdahl's Law affects parallel performance (ES25-4c):</b> ① <b>diminishing returns</b>: each extra processor adds less speedup ② efficiency falls as N grows ③ the serial bottleneck dominates, so optimisation should target the serial part (I/O, locks, initialisation) ④ it assumes a <i>fixed problem size</i>. <b>Gustafson's Law</b> argues that with bigger problems the parallel part grows, so scaled speedup = (1−P) + P·N.</p>
+<p><b>How speedup and efficiency relate to Amdahl's Law (ES24-4c):</b> Amdahl gives the theoretical <i>upper bound</i> on speedup S, and efficiency is that speedup divided by N. Amdahl therefore also predicts that efficiency drops towards 0 as N grows, while S levels off at 1/(1−P).</p>
+<pre><code class="language-java">// Measuring speedup in Java
+public class SpeedupMeasure {
+    public static void main(String[] args) throws Exception {
+        long n = 400_000_000L;
+        long t0 = System.nanoTime();
+        long s1 = java.util.stream.LongStream.range(0, n).map(x -&gt; x % 7).sum();            // sequential
+        long t1 = System.nanoTime();
+        long s2 = java.util.stream.LongStream.range(0, n).parallel().map(x -&gt; x % 7).sum(); // parallel
+        long t2 = System.nanoTime();
+        double seq = (t1 - t0) / 1e9, par = (t2 - t1) / 1e9;
+        int p = Runtime.getRuntime().availableProcessors();
+        System.out.printf(&quot;T1=%.3fs Tp=%.3fs  Speedup=%.2f  Efficiency=%.0f%% on %d cores%n&quot;,
+                seq, par, seq / par, 100 * seq / par / p, p);
+    }
+}</code></pre>
+<h2 id="create">Thread Creation: Thread class vs Runnable <span class="tag p">PYQ ES24-2a</span><span class="tag p">PYQ ES25-4b</span><span class="tag l">Lab 11</span></h2>
+<h3 id="ways">Ways to create threads</h3>
+<ol>
+<li><b>Extend the <code>Thread</code> class</b> and override <code>run()</code>.</li>
+<li><b>Implement <code>Runnable</code></b> (<code>void run()</code>) and pass it to <code>new Thread(r)</code>. Can be written as a lambda.</li>
+<li><b>Implement <code>Callable&lt;V&gt;</code></b> (<code>V call() throws Exception</code>), which returns a result. Submit it to an <code>ExecutorService</code> to get a <code>Future&lt;V&gt;</code>.</li>
+<li><b>Thread pools</b> via <code>ExecutorService</code> / <code>Executors</code> (recommended).</li>
+<li><b>ForkJoinPool</b>, <b>parallel streams</b>, <code>CompletableFuture</code>, and virtual threads (Java 21: <code>Thread.ofVirtual().start(r)</code>).</li>
+</ol>
+<div class="box lab"><b>Lab 11: create and start multiple threads with Thread and Runnable; four threads using Runnable (ES24-2a)</b></div>
+<pre><code class="language-java">// Way 1: extend Thread
+class CounterThread extends Thread {
+    CounterThread(String name) { super(name); }
+    @Override public void run() {
+        for (int i = 1; i &lt;= 3; i++) {
+            System.out.println(getName() + &quot; count &quot; + i);
+            try { Thread.sleep(100); } catch (InterruptedException e) { return; }
+        }
+    }
+}
+
+// Way 2: implement Runnable
+class Task implements Runnable {
+    private final int id;
+    Task(int id) { this.id = id; }
+    @Override public void run() {
+        long sum = 0;
+        for (int i = 1; i &lt;= 1_000_000; i++) sum += i;
+        System.out.println(&quot;Task &quot; + id + &quot; on &quot; + Thread.currentThread().getName() + &quot; → sum=&quot; + sum);
+    }
+}
+
+public class ThreadCreation {
+    public static void main(String[] args) throws InterruptedException {
+        // Thread subclass
+        CounterThread a = new CounterThread(&quot;Alpha&quot;), b = new CounterThread(&quot;Beta&quot;);
+        a.start(); b.start();              // start() creates a new call stack, then calls run()
+        a.join(); b.join();                // main waits for both to finish
+
+        // FOUR threads using Runnable
+        Thread[] workers = new Thread[4];
+        for (int i = 0; i &lt; 4; i++) {
+            workers[i] = new Thread(new Task(i + 1), &quot;Worker-&quot; + (i + 1));
+            workers[i].start();
+        }
+        for (Thread t : workers) t.join();
+
+        // Runnable as a lambda (Runnable is a functional interface)
+        Thread t = new Thread(() -&gt; System.out.println(&quot;Lambda thread: &quot; + Thread.currentThread().getName()));
+        t.start(); t.join();
+        System.out.println(&quot;Main done. State of t = &quot; + t.getState());   // TERMINATED
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Alpha count 1
+Beta count 1
+Beta count 2
+Alpha count 2
+Alpha count 3
+Beta count 3
+Task 2 on Worker-2 → sum=500000500000
+Task 1 on Worker-1 → sum=500000500000
+Task 4 on Worker-4 → sum=500000500000
+Task 3 on Worker-3 → sum=500000500000
+Lambda thread: Thread-0
+Main done. State of t = TERMINATED</code></pre><p class="sub">The interleaving differs from run to run, because the OS scheduler is nondeterministic.</p>
+<div class="box warn"><b><code>start()</code> vs <code>run()</code></b><code>t.start()</code> creates a <b>new thread</b>, which then calls <code>run()</code>. Calling <code>t.run()</code> directly is just a normal method call on the <b>current</b> thread, so nothing runs in parallel. Calling <code>start()</code> twice throws <code>IllegalThreadStateException</code>.</div>
+<table><tr><th>Extending Thread</th><th>Implementing Runnable</th></tr>
+<tr><td>Uses up the single superclass, so it can't extend anything else</td><td>Class can still extend another class</td></tr>
+<tr><td>Task and thread are tightly coupled</td><td>Task is separate from the mechanism that runs it (better design)</td></tr>
+<tr><td>Each object is a thread</td><td>One Runnable can be shared by many threads, or given to thread pools</td></tr>
+<tr><td>Can override other Thread methods</td><td>Only defines <code>run()</code></td></tr>
+<tr><td>Simpler for tiny demos</td><td><b>Preferred</b>. Works with executors and lambdas.</td></tr></table>
+<p><b>Runnable vs Callable:</b> Runnable's <code>run()</code> returns nothing and can't throw checked exceptions. Callable's <code>call()</code> returns a value and can throw them. Callable is only usable through executors.</p>
+
+<h2 id="clientserver">Multithreaded Client-Server Application</h2>
+<p>A single-threaded server handles one client at a time, so others wait. A <b>multithreaded server</b> accepts connections in a loop on the main thread and hands each client <code>Socket</code> to a <b>separate thread</b> (better: to a <b>thread pool</b>). Many clients are then served at once.</p>
+<div class="diagram"> Client 1 ─┐                  ┌──────────────── Server ─────────────────┐
+ Client 2 ─┼── TCP connect ──▶│ ServerSocket.accept() loop (main thread)│
+ Client 3 ─┘                  │     │ new socket                        │
+                              │     ▼                                   │
+                              │  pool.submit(new ClientHandler(socket)) │
+                              │  ├ Thread-1 ↔ Client 1                  │
+                              │  ├ Thread-2 ↔ Client 2                  │
+                              │  └ Thread-3 ↔ Client 3                  │
+                              └─────────────────────────────────────────┘</div><pre><code class="language-java">// EchoServer.java
+import java.io.*;
+import java.net.*;
+import java.util.concurrent.*;
+
+public class EchoServer {
+    public static void main(String[] args) throws IOException {
+        ExecutorService pool = Executors.newFixedThreadPool(10);     // bounded thread count
+        try (ServerSocket server = new ServerSocket(5000)) {
+            System.out.println(&quot;Server listening on 5000&quot;);
+            while (true) {
+                Socket client = server.accept();                     // blocks until a client connects
+                pool.submit(new ClientHandler(client));              // handled concurrently
+            }
+        }
+    }
+}
+class ClientHandler implements Runnable {
+    private final Socket socket;
+    ClientHandler(Socket s) { socket = s; }
+    @Override public void run() {
+        String who = socket.getRemoteSocketAddress().toString();
+        try (socket;
+             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+            out.println(&quot;Welcome &quot; + who + &quot; - type &#x27;bye&#x27; to quit&quot;);
+            String line;
+            while ((line = in.readLine()) != null &amp;&amp; !line.equalsIgnoreCase(&quot;bye&quot;)) {
+                out.println(&quot;[&quot; + Thread.currentThread().getName() + &quot;] echo: &quot; + line.toUpperCase());
+            }
+        } catch (IOException e) {
+            System.out.println(&quot;Client error &quot; + who + &quot;: &quot; + e.getMessage());
+        }
+        System.out.println(who + &quot; disconnected&quot;);
+    }
+}</code></pre><pre><code class="language-java">// EchoClient.java
+import java.io.*;
+import java.net.*;
+import java.util.Scanner;
+
+public class EchoClient {
+    public static void main(String[] args) throws IOException {
+        try (Socket s = new Socket(&quot;localhost&quot;, 5000);
+             BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
+             PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+             Scanner kb = new Scanner(System.in)) {
+            System.out.println(in.readLine());                // welcome
+            while (kb.hasNextLine()) {
+                String msg = kb.nextLine();
+                out.println(msg);
+                if (msg.equalsIgnoreCase(&quot;bye&quot;)) break;
+                System.out.println(in.readLine());
+            }
+        }
+    }
+}</code></pre><p>Run the server, then start several clients in different terminals. Each one is served by a different pool thread.</p>
+
+<h2 id="pool">Thread Pools: ExecutorService <span class="tag p">PYQ ES24-4a</span><span class="tag p">PYQ EJ26-4a</span></h2>
+<p>A <b>thread pool</b> is a set of pre-created, reusable worker threads plus a <b>task queue</b>. Instead of creating a new thread for every task, which is expensive, you <b>submit</b> tasks to the pool. Idle workers take tasks from the queue and run them.</p>
+<div class="diagram"> submit(task) ──▶ [ task queue: T5 T6 T7 ... ] ──▶ Worker-1 (running T1)
+                                                 ─▶ Worker-2 (running T2)
+                                                 ─▶ Worker-3 (running T3)
+                                                 ─▶ Worker-4 (running T4)</div><h3 id="poolsteps">Steps to create and use a thread pool (ES24-4a)</h3>
+<ol><li>Create the pool with the <code>Executors</code> factory (or <code>new ThreadPoolExecutor(...)</code> for full control).</li>
+<li>Write tasks as <code>Runnable</code> or <code>Callable&lt;V&gt;</code>.</li>
+<li>Submit them: <code>execute(Runnable)</code> (no result) or <code>submit(...)</code> → <code>Future</code>. Or <code>invokeAll(collection)</code>.</li>
+<li>Collect results with <code>future.get()</code> (blocks until ready).</li>
+<li>Shut down: <code>shutdown()</code> (finish queued tasks, accept no new ones) then <code>awaitTermination()</code>. <code>shutdownNow()</code> interrupts running tasks.</li></ol>
+<table>
+<tr><th>Factory method</th><th>Behaviour</th></tr>
+<tr><td><code>newFixedThreadPool(n)</code></td><td>Exactly n threads, unbounded queue</td></tr>
+<tr><td><code>newCachedThreadPool()</code></td><td>Creates threads as needed and reuses idle ones (60s keep-alive). Good for many short tasks.</td></tr>
+<tr><td><code>newSingleThreadExecutor()</code></td><td>One thread, tasks run sequentially in order</td></tr>
+<tr><td><code>newScheduledThreadPool(n)</code></td><td>Delayed or periodic tasks (<code>schedule</code>, <code>scheduleAtFixedRate</code>)</td></tr>
+<tr><td><code>newWorkStealingPool()</code></td><td>A ForkJoinPool using all cores</td></tr>
+<tr><td><code>newVirtualThreadPerTaskExecutor()</code></td><td>Java 21: one virtual thread per task</td></tr>
+</table>
+<pre><code class="language-java">import java.util.*;
+import java.util.concurrent.*;
+
+public class ExecutorDemo {
+    public static void main(String[] args) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(3);        // step 1
+
+        // Runnable tasks (fire and forget)
+        for (int i = 1; i &lt;= 5; i++) {
+            int id = i;
+            pool.execute(() -&gt; System.out.println(&quot;Job &quot; + id + &quot; by &quot; + Thread.currentThread().getName()));
+        }
+
+        // Callable tasks with results
+        List&lt;Callable&lt;Long&gt;&gt; jobs = new ArrayList&lt;&gt;();
+        for (int i = 1; i &lt;= 4; i++) {
+            int n = i * 10;
+            jobs.add(() -&gt; factorialSum(n));                            // step 2
+        }
+        List&lt;Future&lt;Long&gt;&gt; results = pool.invokeAll(jobs);             // step 3
+        for (Future&lt;Long&gt; f : results) System.out.println(&quot;Result: &quot; + f.get());   // step 4
+
+        Future&lt;String&gt; slow = pool.submit(() -&gt; { Thread.sleep(2000); return &quot;done&quot;; });
+        try { slow.get(500, TimeUnit.MILLISECONDS); }
+        catch (TimeoutException e) { System.out.println(&quot;Too slow, cancelling&quot;); slow.cancel(true); }
+
+        pool.shutdown();                                               // step 5
+        if (!pool.awaitTermination(5, TimeUnit.SECONDS)) pool.shutdownNow();
+    }
+    static long factorialSum(int n) { long s = 0; for (int i = 1; i &lt;= n; i++) s += i; return s; }
+}</code></pre><h4>Advantages over creating threads by hand (EJ26-4a)</h4>
+<ul><li><b>Reuse:</b> no thread creation/destruction cost for each task, so latency is lower.</li>
+<li><b>Bounded resources:</b> a fixed number of threads can't exhaust memory or CPU, even with 10,000 tasks.</li>
+<li><b>Separation of concerns:</b> you describe <i>what</i> to run, and the executor decides <i>how</i>.</li>
+<li><b>Results and exceptions</b> via <code>Future</code> / <code>Callable</code>. Cancellation and timeouts.</li>
+<li>Built-in scheduling, queuing and graceful shutdown.</li></ul>
+<h4>Risks of using thread pools (ES24-4a)</h4>
+<ol><li><b>Deadlock:</b> tasks wait for results of other tasks still in the queue, but every worker is busy waiting (thread-starvation deadlock).</li>
+<li><b>Thread leakage:</b> a task that never returns (infinite loop, blocked I/O) or a thread killed by an unhandled exception shrinks the pool.</li>
+<li><b>Resource thrashing:</b> a pool that is too big causes heavy context switching and memory use. One that is too small leaves cores idle.</li>
+<li><b>Unbounded queues:</b> <code>newFixedThreadPool</code> queues without limit and may run out of memory under load.</li>
+<li><b>Swallowed exceptions:</b> an exception in <code>submit()</code> is hidden inside the Future until <code>get()</code> is called.</li>
+<li><b>Concurrency errors:</b> tasks sharing data still need synchronisation.</li>
+<li><b>Forgetting <code>shutdown()</code></b> keeps the JVM alive (non-daemon threads).</li>
+<li>ThreadLocal values leaking between tasks that reuse the same thread.</li></ol>
+<p><b>Sizing rule:</b> CPU-bound work: about <i>#cores</i> (or +1). I/O-bound work: <i>#cores × (1 + wait time / compute time)</i>.</p>
+
+<h2 id="forkjoin">ForkJoinPool</h2>
+<p><code>ForkJoinPool</code> (Java 7) is a thread pool for <b>divide-and-conquer</b> problems. A task <b>forks</b> (splits) into subtasks until they are small enough to solve directly, then <b>joins</b> (combines) the results. It uses <b>work-stealing</b>: every worker has its own deque, and an idle worker <i>steals</i> tasks from the tail of a busy worker's deque, which keeps all cores busy. Parallel streams use the common ForkJoinPool.</p>
+<ul><li><code>RecursiveTask&lt;V&gt;</code>: returns a result. <code>RecursiveAction</code>: no result.</li>
+<li>Override <code>compute()</code>: <i>if the task is small, solve it directly; otherwise split, <code>fork()</code> one half, <code>compute()</code> the other, then <code>join()</code></i>.</li></ul>
+<pre><code class="language-java">import java.util.concurrent.*;
+
+class SumTask extends RecursiveTask&lt;Long&gt; {
+    static final int THRESHOLD = 10_000;            // ← granularity control
+    private final int[] arr; private final int lo, hi;
+    SumTask(int[] a, int lo, int hi) { arr = a; this.lo = lo; this.hi = hi; }
+
+    @Override protected Long compute() {
+        if (hi - lo &lt;= THRESHOLD) {                 // small enough → sequential
+            long s = 0; for (int i = lo; i &lt; hi; i++) s += arr[i]; return s;
+        }
+        int mid = (lo + hi) &gt;&gt;&gt; 1;
+        SumTask left = new SumTask(arr, lo, mid);
+        SumTask right = new SumTask(arr, mid, hi);
+        left.fork();                                // run left asynchronously
+        long r = right.compute();                   // compute right in this thread
+        return left.join() + r;                     // wait for left, combine
+    }
+}
+public class ForkJoinDemo {
+    public static void main(String[] args) {
+        int[] data = new int[50_000_000];
+        java.util.Arrays.fill(data, 1);
+        ForkJoinPool pool = ForkJoinPool.commonPool();      // or new ForkJoinPool(4)
+        long t = System.nanoTime();
+        long sum = pool.invoke(new SumTask(data, 0, data.length));
+        System.out.printf(&quot;sum=%d in %.1f ms using %d workers%n&quot;, sum, (System.nanoTime() - t) / 1e6, pool.getParallelism());
+    }
+}</code></pre><table><tr><th>ExecutorService (ThreadPoolExecutor)</th><th>ForkJoinPool</th></tr>
+<tr><td>Independent tasks, one shared queue</td><td>Recursive subtasks, a deque per worker</td></tr>
+<tr><td>Workers just take tasks</td><td>Work-stealing</td></tr>
+<tr><td>Good for I/O and request handling</td><td>Good for CPU-bound divide-and-conquer</td></tr>
+<tr><td>Runnable / Callable</td><td>RecursiveTask / RecursiveAction</td></tr></table>
+
+<h2 id="granularity">Parallel Performance and Task Granularity <span class="tag p">PYQ ES24-4b</span><span class="tag p">PYQ EJ26-4c</span></h2>
+<p><b>Task granularity</b> is the <b>amount of computation per task</b> compared with the overhead of creating, scheduling, communicating and synchronising tasks. It is often expressed as the computation-to-communication ratio.</p>
+<table>
+<tr><th></th><th>Fine-grained</th><th>Coarse-grained</th></tr>
+<tr><td>Task size</td><td>Many tiny tasks</td><td>Few large tasks</td></tr>
+<tr><td>Overhead</td><td><b>High</b>: creation, scheduling, synchronisation dominate</td><td><b>Low</b></td></tr>
+<tr><td>Load balancing</td><td><b>Good</b>: work spreads evenly, and idle cores steal small tasks</td><td><b>Poor</b>: if one big task is slow, the other cores sit idle</td></tr>
+<tr><td>Parallelism available</td><td>High</td><td>Limited (#tasks may be less than #cores)</td></tr>
+<tr><td>Processor utilisation</td><td>Cores busy, but partly with overhead</td><td>Cores may idle at the end (load imbalance)</td></tr>
+<tr><td>Example</td><td>One task per array element</td><td>Splitting the array into 2 halves on an 8-core machine</td></tr>
+</table>
+<p><b>Impact on performance:</b> total time ≈ computation / p + overhead(#tasks) + imbalance. Plotting execution time against task size gives a <b>U-shaped curve</b>. Very small tasks are slow because of overhead. Very large tasks are slow because of idle cores. The best point is in between: usually <b>a few times more tasks than cores</b> (say 4–10 tasks per core), each big enough (about ≥10–100 µs of work) to make the overhead negligible.</p>
+<div class="diagram"> time │\                                      /
+      │ \  overhead-dominated       imbalance/
+      │  \                                 /
+      │   \___                        ____/
+      │       \______________________/
+      │              ▲ optimal granularity
+      └───────────────────────────────────────── task size (threshold)
+        fine                                coarse</div><p><b>Controlling granularity in Java:</b> the <code>THRESHOLD</code> in a ForkJoin task, the number of chunks submitted to an ExecutorService, or the batch size in a parallel loop. <b>Experiment:</b> run the <code>SumTask</code> above with THRESHOLD = 10, 1,000, 100,000, 10,000,000 and time each. Typical result: 10 is slow (millions of tiny tasks), 1,000–100,000 is fastest, and a threshold near the array size creates only a handful of tasks, so most cores sit idle.</p>
+<pre><code class="language-java">public class GranularityExperiment {
+    public static void main(String[] args) {
+        int[] data = new int[20_000_000]; java.util.Arrays.fill(data, 1);
+        for (int th : new int[]{100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000}) {
+            long best = Long.MAX_VALUE;
+            for (int rep = 0; rep &lt; 5; rep++) {         // repeat to warm up the JIT
+                long t = System.nanoTime();
+                new java.util.concurrent.ForkJoinPool().invoke(new Sum(data, 0, data.length, th));
+                best = Math.min(best, System.nanoTime() - t);
+            }
+            System.out.printf(&quot;threshold=%,10d  time=%6.1f ms%n&quot;, th, best / 1e6);
+        }
+    }
+    static class Sum extends java.util.concurrent.RecursiveTask&lt;Long&gt; {
+        int[] a; int lo, hi, th;
+        Sum(int[] a, int lo, int hi, int th) { this.a = a; this.lo = lo; this.hi = hi; this.th = th; }
+        protected Long compute() {
+            if (hi - lo &lt;= th) { long s = 0; for (int i = lo; i &lt; hi; i++) s += a[i]; return s; }
+            int m = (lo + hi) &gt;&gt;&gt; 1; Sum l = new Sum(a, lo, m, th); l.fork();
+            return new Sum(a, m, hi, th).compute() + l.join();
+        }
+    }
+}</code></pre></main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>

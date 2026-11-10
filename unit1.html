@@ -1,0 +1,606 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit 1 · OOP Foundations</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Unit 1: Object-Oriented Foundations</h1>
+<p class="sub">OOP paradigm · encapsulation · modularity · code reuse · classes and objects · constructors · class relationships · interfaces · polymorphism via interfaces · inheritance</p>
+
+<h2 id="paradigm">Introduction to the Object-Oriented Paradigm</h2>
+<p>A <b>programming paradigm</b> is a style of organising programs. In <b>procedure-oriented programming (POP)</b>, such as C, a program is a list of functions acting on shared data. As programs grow, any function can change any data, which makes bugs hard to trace and change expensive.</p>
+<p><b>Object-Oriented Programming (OOP)</b> models a program as a set of <b>objects</b> that interact. Each object bundles <b>state</b> (data, fields) and <b>behaviour</b> (methods), and it controls access to its own data. An object is a self-contained "thing" from the problem domain, such as a BankAccount, Student or Car.</p>
+<table>
+<tr><th>Aspect</th><th>Procedure-Oriented (POP)</th><th>Object-Oriented (OOP)</th></tr>
+<tr><td>Unit of program</td><td>Function</td><td>Object / class</td></tr>
+<tr><td>Approach</td><td>Top-down</td><td>Bottom-up</td></tr>
+<tr><td>Data</td><td>Global, shared, freely accessible</td><td>Hidden inside objects (encapsulated)</td></tr>
+<tr><td>Focus</td><td>Algorithm / steps</td><td>Data and its behaviour</td></tr>
+<tr><td>Reuse</td><td>Copy functions</td><td>Inheritance, composition, polymorphism</td></tr>
+<tr><td>Security</td><td>Low</td><td>High (access modifiers)</td></tr>
+<tr><td>Examples</td><td>C, Pascal, Fortran</td><td>Java, C++, Python, C#</td></tr>
+</table>
+
+<h3 id="pillars">The four pillars of OOP <span class="tag p">PYQ ES25-1c</span><span class="tag p">PYQ EJ26-1a</span><span class="tag p">PYQ MS26-1b</span></h3>
+<table>
+<tr><th>Pillar</th><th>Meaning</th><th>Java mechanism</th><th>Real-world example</th></tr>
+<tr><td><b>Encapsulation</b></td><td>Bundle data with the methods that use it, and hide the internal state</td><td><code>private</code> fields + public getters/setters</td><td>A capsule: medicine is hidden inside the shell</td></tr>
+<tr><td><b>Abstraction</b></td><td>Show <i>what</i> an object does and hide <i>how</i></td><td>Abstract classes, interfaces</td><td>Driving a car without knowing how the engine works</td></tr>
+<tr><td><b>Inheritance</b></td><td>A new class acquires the properties of an existing class (IS-A)</td><td><code>extends</code>, <code>implements</code></td><td>A Dog is an Animal</td></tr>
+<tr><td><b>Polymorphism</b></td><td>"Many forms": one interface, different behaviours</td><td>Overloading (compile-time), overriding (runtime)</td><td>A person is a student in class and a customer in a shop</td></tr>
+</table>
+<p>One program that shows all four pillars together (answer for <b>EJ26-1a / MS26-1b</b>):</p>
+<pre><code class="language-java">// ABSTRACTION: callers only know &quot;an Account can deposit/withdraw/compute interest&quot;
+abstract class Account {
+    // ENCAPSULATION: state is private; changed only through validated methods
+    private final String accNo;
+    private double balance;
+
+    Account(String accNo, double opening) { this.accNo = accNo; this.balance = opening; }
+
+    public double getBalance() { return balance; }
+    public String getAccNo()   { return accNo; }
+
+    public void deposit(double amt) {
+        if (amt &lt;= 0) throw new IllegalArgumentException(&quot;Amount must be positive&quot;);
+        balance += amt;
+    }
+    public void withdraw(double amt) {
+        if (amt &gt; balance) throw new IllegalStateException(&quot;Insufficient funds&quot;);
+        balance -= amt;
+    }
+    protected void addInterest(double amt) { balance += amt; }
+
+    public abstract double interestRate();          // HOW is decided by subclasses
+    public void applyInterest() { addInterest(balance * interestRate()); }
+}
+
+// INHERITANCE: reuse all the Account code; add only what is different
+class SavingsAccount extends Account {
+    SavingsAccount(String n, double b) { super(n, b); }
+    @Override public double interestRate() { return 0.04; }
+}
+class FixedDeposit extends Account {
+    FixedDeposit(String n, double b) { super(n, b); }
+    @Override public double interestRate() { return 0.07; }
+    @Override public void withdraw(double amt) { throw new UnsupportedOperationException(&quot;FD locked&quot;); }
+}
+
+public class Bank {
+    public static void main(String[] args) {
+        // POLYMORPHISM: one reference type, many runtime behaviours
+        Account[] accounts = { new SavingsAccount(&quot;S1&quot;, 1000), new FixedDeposit(&quot;F1&quot;, 1000) };
+        for (Account a : accounts) {
+            a.applyInterest();                         // dynamic dispatch
+            System.out.println(a.getAccNo() + &quot; → &quot; + a.getBalance());
+        }
+        // accounts[0].balance = 1e9;   // compile error: encapsulation protects state
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">S1 → 1040.0
+F1 → 1070.0</code></pre><p><b>How this improves reusability, security and maintainability:</b> new account types are added without touching <code>Bank</code> (open for extension). Balance rules live in one place, so a bug is fixed once. External code can't put an account into an invalid state.</p>
+
+<h2 id="examples">Examples of OOP</h2>
+<ul>
+<li><b>GUI toolkits</b> (JavaFX/Swing): Button, TextField and Label are objects. They all inherit from <code>Node</code> and respond to events.</li>
+<li><b>Banking:</b> Account, Customer, Transaction, Loan.</li>
+<li><b>Games:</b> Player, Enemy and Bullet, all <code>GameObject</code>s with <code>update()</code> and <code>draw()</code>.</li>
+<li><b>Library system:</b> Book, Member, Librarian, Loan (worked out below).</li>
+<li><b>Java's own library:</b> <code>String</code>, <code>ArrayList</code>, <code>Thread</code> and <code>Scanner</code> are all classes.</li>
+</ul>
+
+<h2 id="encap">Data Encapsulation <span class="tag p">PYQ MJ26-1a</span><span class="tag l">Lab 6</span></h2>
+<p><b>Encapsulation</b> means wrapping data (fields) and the code that works on it (methods) into one unit (a class), and <b>restricting direct access</b> to the data. This is also called <b>data hiding</b>. Outsiders talk to the object only through its public methods, called its <i>interface</i>.</p>
+<p><b>How to achieve it in Java:</b></p>
+<ol><li>Declare fields <code>private</code>.</li><li>Provide <code>public</code> getter (accessor) and setter (mutator) methods only where needed.</li><li>Put validation inside setters, so the object can't hold invalid state (it keeps its <i>class invariant</i>).</li></ol>
+<p><b>Benefits:</b> control and validation, flexibility (internal representation can change without breaking callers), security, read-only or write-only properties, easier testing and maintenance.</p>
+<div class="box lab"><b>Lab 6: Student with private attributes, getters and setters</b></div>
+<pre><code class="language-java">public class Student {
+    private int rollNo;
+    private String name;
+    private double cgpa;
+
+    public Student(int rollNo, String name, double cgpa) {
+        this.rollNo = rollNo;
+        setName(name);          // reuse validation
+        setCgpa(cgpa);
+    }
+
+    public int getRollNo()   { return rollNo; }          // read-only: no setter
+    public String getName()  { return name; }
+    public double getCgpa()  { return cgpa; }
+
+    public void setName(String name) {
+        if (name == null || name.isBlank()) throw new IllegalArgumentException(&quot;Name required&quot;);
+        this.name = name.trim();
+    }
+    public void setCgpa(double cgpa) {
+        if (cgpa &lt; 0 || cgpa &gt; 10) throw new IllegalArgumentException(&quot;CGPA must be 0-10&quot;);
+        this.cgpa = cgpa;
+    }
+
+    @Override public String toString() { return rollNo + &quot; &quot; + name + &quot; (&quot; + cgpa + &quot;)&quot;; }
+
+    public static void main(String[] args) {
+        Student s = new Student(101, &quot;Parv&quot;, 8.7);
+        s.setCgpa(9.1);
+        System.out.println(s);
+        try { s.setCgpa(12); } catch (IllegalArgumentException e) { System.out.println(&quot;Rejected: &quot; + e.getMessage()); }
+        // s.cgpa = 12;  // compile error - field is private
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">101 Parv (9.1)
+Rejected: CGPA must be 0-10</code></pre>
+<h2 id="modularity">Modularity <span class="tag p">PYQ MS24-1a</span><span class="tag p">PYQ MJ26-1a</span></h2>
+<p><b>Modularity</b> means dividing a large system into smaller, independent, self-contained parts (<b>modules</b>). Each module has a well-defined responsibility and interface. Each one can be designed, written, tested and changed separately.</p>
+<p><b>Significance:</b></p>
+<ul><li><b>Manage complexity:</b> you understand one module at a time (divide and conquer).</li>
+<li><b>Parallel development:</b> different teams build different modules.</li>
+<li><b>Easier testing and debugging:</b> a module can be unit-tested on its own.</li>
+<li><b>Reusability:</b> a well-made module (for example a logging or date utility) is reused in other projects.</li>
+<li><b>Maintainability:</b> changes stay inside one module.</li></ul>
+<p><b>Good modules have high cohesion</b> (everything inside belongs together) <b>and low coupling</b> (few dependencies on other modules).</p>
+<p><b>How it is achieved in Java/OOP (many levels):</b></p>
+<ol><li><b>Methods:</b> one task per method.</li>
+<li><b>Classes:</b> one responsibility per class (Single Responsibility Principle), with encapsulated state.</li>
+<li><b>Interfaces:</b> modules depend on contracts, not on implementations.</li>
+<li><b>Packages:</b> group related classes (<code>com.shop.payment</code>, <code>com.shop.inventory</code>).</li>
+<li><b>Java Platform Module System (Java 9+):</b> <code>module-info.java</code> with <code>requires</code>/<code>exports</code>.</li></ol>
+<pre><code class="language-java">// module-info.java  (Java 9+)
+module com.shop.payment {
+    requires com.shop.core;          // depends on
+    exports com.shop.payment.api;    // only this package is visible outside
+}</code></pre>
+<h2 id="reuse">Code Reuse <span class="tag p">PYQ MJ26-1a</span><span class="tag p">PYQ ES24-1c</span></h2>
+<p><b>Code reuse</b> means using existing, tested code to build new functionality instead of writing it again. It cuts development time and bugs, because tested code is trusted.</p>
+<p><b>Mechanisms in Java:</b></p>
+<ol>
+<li><b>Inheritance (IS-A):</b> a subclass reuses and extends the superclass. See <a href="#inheritance">Inheritance</a>.</li>
+<li><b>Composition (HAS-A):</b> a class reuses another by holding an instance of it. This is often preferred: <i>"favour composition over inheritance"</i>.</li>
+<li><b>Interfaces and polymorphism:</b> code written against an interface works with every future implementation.</li>
+<li><b>Generics:</b> one <code>List&lt;T&gt;</code> works for every type.</li>
+<li><b>Libraries and packages:</b> the Java API, Maven libraries.</li>
+<li><b>Methods:</b> call the same method from many places.</li>
+</ol>
+<p><b>How encapsulation, modularity and reuse improve maintainability (MJ26-1a):</b> encapsulation keeps changes local, because internals can change without breaking callers. Modularity limits how far a change spreads and lets parts be tested separately. Reuse means a fix in one shared component helps every user, and there is less duplicated code to keep in sync.</p>
+
+<h2 id="identify">Identifying Classes and Objects <span class="tag p">PYQ MJ26-2b</span><span class="tag p">PYQ EJ26-1b</span></h2>
+<p>A <b>class</b> is a blueprint or template that defines state (fields) and behaviour (methods). An <b>object</b> is a concrete <i>instance</i> of a class, with its own copy of the instance fields and stored on the heap.</p>
+<table><tr><th>Class</th><th>Object</th></tr>
+<tr><td>Blueprint / logical entity</td><td>Instance / physical entity</td></tr>
+<tr><td>Declared once</td><td>Many can be created</td></tr>
+<tr><td>No memory for instance fields</td><td>Memory allocated on the heap</td></tr>
+<tr><td><code>class Car {...}</code></td><td><code>new Car()</code></td></tr></table>
+
+<h3 id="nounverb">The noun–verb analysis technique</h3>
+<ol><li>Write or read the <b>problem statement</b>.</li>
+<li><b>Underline the nouns</b>: these are candidate <b>classes</b> or <b>attributes</b>.</li>
+<li>Remove duplicates, vague words, and nouns that are only simple values. Those become attributes (for example "title" is an attribute of Book).</li>
+<li><b>Underline the verbs</b>: these are candidate <b>methods</b> (responsibilities).</li>
+<li>Find <b>relationships</b>: "has a" means association, aggregation or composition. "Is a" means inheritance. "Uses" means dependency.</li>
+<li>Check with <b>CRC cards</b> (Class–Responsibility–Collaborator).</li></ol>
+
+<h3 id="library">Worked example: Library Management System</h3>
+<p class="box pyq"><b>Problem statement</b><i>"A <u>library</u> has many <u>books</u>. Each book has a <u>title</u>, <u>author</u> and <u>ISBN</u>, and may have several <u>copies</u>. <u>Members</u> <b>borrow</b> and <b>return</b> copies. A <u>librarian</u> <b>adds</b> books, <b>issues</b> copies and <b>collects fines</b> for late returns. Each <u>loan</u> records the <u>issue date</u> and <u>due date</u>."</i></p>
+<table>
+<tr><th>Class</th><th>Attributes</th><th>Methods</th></tr>
+<tr><td>Library</td><td>name, books: List&lt;Book&gt;, members</td><td>addBook(), findByTitle()</td></tr>
+<tr><td>Book</td><td>isbn, title, author, copies</td><td>availableCopies()</td></tr>
+<tr><td>BookCopy</td><td>copyId, status</td><td>isAvailable()</td></tr>
+<tr><td>Person (abstract)</td><td>id, name</td><td></td></tr>
+<tr><td>Member extends Person</td><td>loans, maxBooks</td><td>borrow(), returnCopy()</td></tr>
+<tr><td>Librarian extends Person</td><td>employeeId</td><td>issue(), collectFine()</td></tr>
+<tr><td>Loan</td><td>copy, member, issueDate, dueDate</td><td>isOverdue(), fine()</td></tr>
+</table>
+<p><b>Relationships and why (EJ26-1b):</b></p>
+<ul>
+<li><b>Library ◆— Book: composition.</b> In this design, a Book record exists only as part of the Library catalogue. Deleting the library deletes its catalogue.</li>
+<li><b>Book ◆— BookCopy: composition.</b> A copy can't exist without its Book.</li>
+<li><b>Library ◇— Member: aggregation.</b> Members are people who exist independently. The library just keeps a list of them.</li>
+<li><b>Member —— Loan —— BookCopy: association</b>, through the Loan class. A member can have many loans.</li>
+<li><b>Member, Librarian → Person: inheritance</b> (IS-A).</li>
+<li><b>Librarian - - &gt; Loan: dependency.</b> <code>issue()</code> creates or uses a Loan only inside the method.</li>
+</ul>
+<div class="diagram">            ┌──────────┐ 1      * ┌──────────┐ 1      * ┌───────────┐
+            │ Library  │◆────────▶│  Book    │◆────────▶│ BookCopy  │
+            └──────────┘          └──────────┘          └───────────┘
+               ◇ 1                                          ▲ 1
+               │ *                                          │
+            ┌──────────┐ 1      * ┌──────────┐ *            │
+            │  Member  │─────────▶│  Loan    │──────────────┘
+            └──────────┘          └──────────┘
+                 △                      ▲
+                 │      ┌───────────┐   ┊ «uses»
+            ┌────┴────┐ │ Librarian │┄┄┄┘
+            │ Person  │◁┤           │
+            └─────────┘ └───────────┘</div><pre><code class="language-java">import java.time.LocalDate;
+import java.util.*;
+
+abstract class Person {
+    protected final int id; protected final String name;
+    Person(int id, String name) { this.id = id; this.name = name; }
+}
+class Book {
+    final String isbn, title, author;
+    private final List&lt;BookCopy&gt; copies = new ArrayList&lt;&gt;();        // composition
+    Book(String isbn, String title, String author, int nCopies) {
+        this.isbn = isbn; this.title = title; this.author = author;
+        for (int i = 1; i &lt;= nCopies; i++) copies.add(new BookCopy(isbn + &quot;-&quot; + i, this));
+    }
+    Optional&lt;BookCopy&gt; anyAvailable() { return copies.stream().filter(BookCopy::isAvailable).findFirst(); }
+}
+class BookCopy {
+    final String copyId; final Book book; boolean onLoan;
+    BookCopy(String id, Book b) { copyId = id; book = b; }
+    boolean isAvailable() { return !onLoan; }
+}
+class Loan {
+    final BookCopy copy; final Member member; final LocalDate issued, due;
+    Loan(BookCopy c, Member m) { copy = c; member = m; issued = LocalDate.now(); due = issued.plusDays(14); }
+    boolean isOverdue(LocalDate today) { return today.isAfter(due); }
+}
+class Member extends Person {
+    final List&lt;Loan&gt; loans = new ArrayList&lt;&gt;();                     // association
+    Member(int id, String name) { super(id, name); }
+}
+class Librarian extends Person {
+    Librarian(int id, String name) { super(id, name); }
+    Loan issue(Book b, Member m) {                                  // dependency on Loan
+        BookCopy c = b.anyAvailable().orElseThrow(() -&gt; new IllegalStateException(&quot;No copy free&quot;));
+        c.onLoan = true;
+        Loan loan = new Loan(c, m);
+        m.loans.add(loan);
+        return loan;
+    }
+}
+public class LibraryApp {
+    public static void main(String[] args) {
+        Book b = new Book(&quot;978-0134685991&quot;, &quot;Effective Java&quot;, &quot;Bloch&quot;, 2);
+        Member m = new Member(1, &quot;Asha&quot;);
+        Librarian lib = new Librarian(100, &quot;Mr. Rao&quot;);
+        Loan l = lib.issue(b, m);
+        System.out.println(m.name + &quot; borrowed &quot; + l.copy.copyId + &quot; due &quot; + l.due);
+    }
+}</code></pre>
+<h2 id="objects">Working with Objects <span class="tag p">PYQ MJ26-2a</span><span class="tag p">PYQ ES25-2a</span><span class="tag l">Lab 3</span></h2>
+
+<h3 id="ivars">Instance variables vs local vs static variables</h3>
+<table><tr><th></th><th>Instance variable</th><th>Static (class) variable</th><th>Local variable</th></tr>
+<tr><td>Declared</td><td>In the class, outside methods</td><td>In the class, with <code>static</code></td><td>Inside a method/block</td></tr>
+<tr><td>Copies</td><td>One per object</td><td>One per class (shared)</td><td>One per method call</td></tr>
+<tr><td>Memory</td><td>Heap (inside the object)</td><td>Method area / metaspace</td><td>Stack</td></tr>
+<tr><td>Default value</td><td>Yes (0, null, false)</td><td>Yes</td><td><b>No</b>: must be initialised before use</td></tr>
+<tr><td>Lifetime</td><td>As long as the object</td><td>As long as the class is loaded</td><td>Until the method returns</td></tr></table>
+
+<h3 id="constructors">Constructors <span class="tag p">PYQ MS24-3a</span><span class="tag p">PYQ MS26-1a</span></h3>
+<p>A <b>constructor</b> is a special block that <b>initialises a new object</b>. It runs automatically when you use <code>new</code>.</p>
+<ul><li>Same name as the class, <b>no return type</b> (not even void).</li>
+<li>Called once per object creation. It can't be <code>static</code>, <code>final</code> or <code>abstract</code>.</li>
+<li>If you write <b>no</b> constructor, the compiler adds a <b>default no-arg constructor</b>. If you write <i>any</i> constructor, the default one is <b>not</b> added.</li>
+<li>Types: <b>default / no-arg</b>, <b>parameterised</b>, <b>copy constructor</b> (by convention, since Java has no built-in copy constructor).</li>
+<li><b>Constructor overloading:</b> several constructors with different parameter lists. <code>this(...)</code> chains them to avoid duplicated code.</li></ul>
+<div class="box lab"><b>Lab 3: class Car with model, year, price (with constructor overloading)</b></div>
+<pre><code class="language-java">public class Car {
+    // instance variables
+    private String model;
+    private int year;
+    private double price;
+    private static int carsBuilt = 0;            // class variable shared by all cars
+
+    // 1. default (no-arg) constructor
+    public Car() {
+        this(&quot;Unknown&quot;, 2024, 0.0);              // chain to the parameterised one
+    }
+    // 2. parameterised constructor
+    public Car(String model, int year, double price) {
+        this.model = model;
+        this.year = year;
+        this.price = price;
+        carsBuilt++;
+    }
+    // 3. overloaded: model only
+    public Car(String model) { this(model, 2024, 500000); }
+    // 4. copy constructor
+    public Car(Car other) { this(other.model, other.year, other.price); }
+
+    public void display() { System.out.printf(&quot;%-10s %d  ₹%,.0f%n&quot;, model, year, price); }
+    public static int getCarsBuilt() { return carsBuilt; }
+
+    public static void main(String[] args) {
+        Car c1 = new Car();                              // default
+        Car c2 = new Car(&quot;Nexon&quot;, 2023, 950000);         // parameterised
+        Car c3 = new Car(&quot;Swift&quot;);                       // overloaded
+        Car c4 = new Car(c2);                            // copy
+        c1.display(); c2.display(); c3.display(); c4.display();
+        System.out.println(&quot;Cars built: &quot; + Car.getCarsBuilt());
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Unknown    2024  ₹0
+Nexon      2023  ₹950,000
+Swift      2024  ₹500,000
+Nexon      2023  ₹950,000
+Cars built: 4</code></pre><p><b>Output explained:</b> the compiler picks a constructor by matching the number and types of arguments (compile-time polymorphism). Each <code>this(...)</code> call ends in the 3-argument constructor, so <code>carsBuilt</code> rises by exactly one per object.</p>
+<table><tr><th>Constructor</th><th>Method</th></tr>
+<tr><td>Initialises an object</td><td>Describes behaviour</td></tr>
+<tr><td>Same name as the class</td><td>Any name</td></tr>
+<tr><td>No return type</td><td>Must have a return type</td></tr>
+<tr><td>Called implicitly by <code>new</code></td><td>Called explicitly</td></tr>
+<tr><td>Not inherited</td><td>Inherited (unless private)</td></tr>
+<tr><td>Compiler gives a default</td><td>No default</td></tr></table>
+
+<h3 id="reassign">Variable reassignment and references</h3>
+<p>A variable of class type holds a <b>reference</b> (an arrow) to an object, not the object itself. Assigning one reference variable to another copies the arrow, so both now point to the <b>same</b> object (aliasing). Reassigning a variable makes it point elsewhere. If no variable points to the old object any more, it becomes garbage.</p>
+<pre><code class="language-java">Car a = new Car(&quot;City&quot;, 2020, 1e6);
+Car b = a;               // aliasing: a and b → same object
+b.setPrice(9e5);         // visible through a as well
+a = new Car(&quot;Verna&quot;);    // a now points to a new object; b still → &quot;City&quot;
+b = null;                // &quot;City&quot; object is unreachable → eligible for GC
+
+int x = 5; int y = x; y = 10;  // primitives: y is an independent copy, x stays 5</code></pre><div class="diagram">After  Car b = a;            After  a = new Car(&quot;Verna&quot;);
+ a ──┐                        a ──▶ [Verna]
+     ├──▶ [City]              b ──▶ [City]
+ b ──┘</div><p><code>final Car c = new Car();</code> means the <i>reference</i> can't be reassigned. The object itself can still change.</p>
+
+<h2 id="relations">Class Relationships <span class="tag p">PYQ MS24-1b</span><span class="tag p">PYQ MJ26-1b</span><span class="tag p">PYQ MS26-2a</span><span class="tag p">PYQ EJ26-1b</span></h2>
+<p>Objects rarely work alone. UML defines how classes relate. From the weakest link to the strongest:</p>
+<div class="diagram">Dependency  &lt;  Association  &lt;  Aggregation  &lt;  Composition  (&lt; Inheritance)
+ &quot;uses-a&quot;       &quot;knows-a&quot;       &quot;has-a&quot; (weak)   &quot;owns-a&quot;/part-of (strong)
+ - - - - -&gt;     ──────────&gt;     ◇──────────&gt;     ◆──────────&gt;       ──────▷</div>
+<h3 id="dependency">Dependency ("uses-a")</h3>
+<p>Class A <b>depends on</b> class B if A uses B only <i>temporarily</i>: as a method parameter, a local variable, or a call to B's static method. A doesn't store B as a field. If B changes, A may have to change. It is the weakest relationship.</p>
+<pre><code class="language-java">class Printer { void print(String s) { System.out.println(s); } }
+class Report {
+    void generate(Printer p) {   // dependency: Printer is only a parameter
+        p.print(&quot;Report body&quot;);
+    }
+}</code></pre>
+<h3 id="association">Association ("knows-a" / "has-a")</h3>
+<p>A <b>structural</b> link where one class keeps a reference to another as a <b>field</b>, so the link lasts beyond a single call. It can be one-way or two-way, with multiplicity (1–1, 1–*, *–*). Both objects have <b>independent lifecycles</b>, and neither owns the other.</p>
+<pre><code class="language-java">class Teacher { String name; Teacher(String n){name=n;} }
+class Student {
+    String name;
+    List&lt;Teacher&gt; teachers = new ArrayList&lt;&gt;();   // association (many-to-many)
+    Student(String n){name=n;}
+}</code></pre><p><b>Aggregation</b> is a special kind of association: a <b>whole–part</b> relation where the part <b>can exist without the whole</b> (weak ownership). The parts are usually created outside and passed in.</p>
+<pre><code class="language-java">class Department {
+    private final List&lt;Professor&gt; profs;
+    Department(List&lt;Professor&gt; profs) { this.profs = profs; }   // created outside → aggregation
+}
+// deleting the Department does NOT delete the Professors</code></pre>
+<h3 id="composition">Composition ("owns-a" / "part-of")</h3>
+<p>A <b>strong</b> whole–part relationship. The part <b>can't exist without the whole</b>, and the whole <b>creates and destroys</b> its parts, so the part's lifecycle is tied to the owner. A part belongs to only one whole at a time.</p>
+<pre><code class="language-java">class Engine { void start(){ System.out.println(&quot;Engine on&quot;); } }
+class Car {
+    private final Engine engine = new Engine();   // created inside, never shared → composition
+    void drive() { engine.start(); }
+}
+// when the Car object is garbage collected, its Engine goes too</code></pre>
+<h3 id="relcompare">Comparison table (MS26-2a, MJ26-1b)</h3>
+<table>
+<tr><th>Criterion</th><th>Dependency</th><th>Association</th><th>Aggregation</th><th>Composition</th></tr>
+<tr><td>Phrase</td><td>uses-a</td><td>knows-a</td><td>has-a</td><td>owns-a / part-of</td></tr>
+<tr><td>Stored as field?</td><td>No (param/local)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Ownership</td><td>None</td><td>None</td><td>Weak</td><td>Strong / exclusive</td></tr>
+<tr><td>Lifecycle</td><td>Independent</td><td>Independent</td><td>Part survives the whole</td><td>Part dies with the whole</td></tr>
+<tr><td>Strength / coupling</td><td>Weakest</td><td>Weak</td><td>Medium</td><td>Strongest</td></tr>
+<tr><td>UML</td><td>dashed arrow - - -&gt;</td><td>solid line ──</td><td>hollow diamond ◇──</td><td>filled diamond ◆──</td></tr>
+<tr><td>Example</td><td>Driver uses Map to navigate</td><td>Doctor – Patient</td><td>Team – Player, Department – Professor</td><td>House – Room, Car – Engine, Human – Heart</td></tr>
+</table>
+<p><b>How they are interrelated (MS24-1b):</b> they are degrees of the same idea, one class collaborating with another. Composition is a stronger form of aggregation, aggregation is a special form of association, and association is a lasting, structural form of the temporary "use" in a dependency. Every composition is an association, but not every association is a composition.</p>
+<p><b>Combined example:</b> a <code>Car</code> is <i>composed</i> of an <code>Engine</code>, <i>associated</i> with its <code>Owner</code>, and <i>depends</i> on a <code>FuelStation</code> passed to its <code>refuel(FuelStation s)</code> method.</p>
+
+<h2 id="interfaces">Interfaces <span class="tag p">PYQ MS24-3b</span><span class="tag p">PYQ ES25-1b</span><span class="tag p">PYQ MS26-2b</span><span class="tag l">Lab 7</span></h2>
+<p>An <b>interface</b> is a <b>contract</b>: a named set of method signatures (<i>what</i> to do) without saying <i>how</i>. A class that <code>implements</code> the interface promises to give bodies for all its abstract methods.</p>
+<pre><code class="language-java">public interface Shape {
+    double PI = 3.14159;               // implicitly public static final (constant)
+    double area();                      // implicitly public abstract
+    double perimeter();
+
+    default String describe() {         // Java 8: default method (has a body)
+        return getClass().getSimpleName() + &quot; area=&quot; + String.format(&quot;%.2f&quot;, area());
+    }
+    static Shape unitSquare() {         // Java 8: static method
+        return new Square(1);
+    }
+    private void helper() {}            // Java 9: private method (used by default methods)
+}</code></pre><p><b>Rules:</b> fields are always <code>public static final</code>. Abstract methods are <code>public abstract</code>. An interface can't be instantiated and has no constructors. A class can <b>implement many</b> interfaces. An interface can <b>extend many</b> interfaces.</p>
+<p><b>Significance of interfaces (MS24-3b):</b></p>
+<ol><li><b>Full abstraction:</b> it separates specification from implementation.</li>
+<li><b>Multiple inheritance of type:</b> a class can be a <code>Runnable</code>, <code>Comparable</code> and <code>Serializable</code> all at once.</li>
+<li><b>Loose coupling:</b> code depends on <code>List</code>, not <code>ArrayList</code>, so implementations can be swapped.</li>
+<li><b>Polymorphism:</b> unrelated classes can be treated the same way.</li>
+<li><b>Callbacks and events:</b> <code>EventHandler</code>, <code>Runnable</code>, <code>Comparator</code>.</li>
+<li><b>Easier testing:</b> real objects can be replaced with mocks.</li></ol>
+
+<h3 id="multinh">Multiple inheritance using interfaces <span class="tag p">PYQ MS26-2b</span></h3>
+<p>Java does <b>not</b> allow a class to <code>extends</code> two classes. If both had a method <code>m()</code> with different bodies, the subclass wouldn't know which to inherit. This is the <b>diamond problem</b>. Interfaces originally had no bodies, so implementing several of them was always safe. With Java 8 default methods, a clash is still allowed, but the class <b>must override</b> the method and may pick a version with <code>X.super.m()</code>.</p>
+<pre><code class="language-java">interface Flyable {
+    void fly();
+    default void info() { System.out.println(&quot;I can fly&quot;); }
+    static int maxAltitude() { return 10000; }        // called as Flyable.maxAltitude()
+}
+interface Swimmable {
+    void swim();
+    default void info() { System.out.println(&quot;I can swim&quot;); }
+}
+class Duck implements Flyable, Swimmable {             // multiple inheritance of type
+    public void fly()  { System.out.println(&quot;Duck flies&quot;); }
+    public void swim() { System.out.println(&quot;Duck swims&quot;); }
+    @Override public void info() {                     // MUST resolve the default-method clash
+        Flyable.super.info();
+        Swimmable.super.info();
+    }
+}
+public class MultiDemo {
+    public static void main(String[] args) {
+        Duck d = new Duck();
+        d.fly(); d.swim(); d.info();
+        System.out.println(&quot;Max altitude: &quot; + Flyable.maxAltitude());
+        Flyable f = d; Swimmable s = d;              // same object seen through two types
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Duck flies
+Duck swims
+I can fly
+I can swim
+Max altitude: 10000</code></pre><p><b>Default methods</b> let an interface gain new methods without breaking existing implementations. That is how <code>List.sort()</code> and <code>Collection.stream()</code> were added in Java 8. <b>Static methods</b> are utility methods that belong to the interface. They aren't inherited, so you call them as <code>Interface.method()</code>.</p>
+<p><b>Functional interface:</b> an interface with exactly one abstract method (<code>Runnable</code>, <code>Comparator</code>, <code>Callable</code>). It can be implemented with a <b>lambda</b>: <code>Runnable r = () -&gt; System.out.println("hi");</code></p>
+<p><b>Marker interface:</b> an interface with no methods, used only to tag a class: <code>Serializable</code>, <code>Cloneable</code>.</p>
+
+<h3 id="ifcls">Similarities between interfaces and classes (ES25-1b)</h3>
+<ul><li>Both are reference types, compiled to <code>.class</code> files, and can be put in packages.</li>
+<li>Both can contain constants, static methods, and (since Java 8) concrete methods.</li>
+<li>Both can be used as the type of a variable, parameter or return value.</li>
+<li>Both support inheritance hierarchies (<code>extends</code>), and both can be generic.</li></ul>
+<p><b>Differences:</b> an interface can't be instantiated, has no constructors or instance fields (only constants), its methods are public by default, and a class can implement many of them.</p>
+
+<h2 id="polyiface">Polymorphism using Interfaces <span class="tag p">PYQ MJ26-3b</span></h2>
+<p>A reference of an <b>interface type</b> can point to an object of <b>any class that implements it</b>. Calling a method through that reference runs the <b>implementing class's version</b>, chosen at runtime. This is runtime polymorphism with no inheritance between the classes at all.</p>
+<pre><code class="language-java">interface Vehicle {
+    void start();
+    int wheels();
+    default String fare(int km) { return &quot;₹&quot; + km * ratePerKm(); }
+    double ratePerKm();
+}
+class Car implements Vehicle {
+    public void start()       { System.out.println(&quot;Car: push-button start&quot;); }
+    public int wheels()       { return 4; }
+    public double ratePerKm() { return 12; }
+}
+class Bike implements Vehicle {
+    public void start()       { System.out.println(&quot;Bike: kick start&quot;); }
+    public int wheels()       { return 2; }
+    public double ratePerKm() { return 6; }
+}
+class Bus implements Vehicle {
+    public void start()       { System.out.println(&quot;Bus: diesel engine cranks&quot;); }
+    public int wheels()       { return 6; }
+    public double ratePerKm() { return 2; }
+}
+public class VehicleDemo {
+    static void trip(Vehicle v, int km) {          // works for ANY Vehicle, present or future
+        v.start();
+        System.out.println(&quot;  wheels=&quot; + v.wheels() + &quot;, fare for &quot; + km + &quot;km = &quot; + v.fare(km));
+    }
+    public static void main(String[] args) {
+        List&lt;Vehicle&gt; fleet = List.of(new Car(), new Bike(), new Bus());
+        for (Vehicle v : fleet) trip(v, 10);       // same call, different behaviour
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Car: push-button start
+  wheels=4, fare for 10km = ₹120.0
+Bike: kick start
+  wheels=2, fare for 10km = ₹60.0
+Bus: diesel engine cranks
+  wheels=6, fare for 10km = ₹20.0</code></pre><p>Adding <code>Truck implements Vehicle</code> later needs <b>no change</b> to <code>trip()</code>. This is the <b>Open/Closed Principle</b>.</p>
+
+<h2 id="inheritance">Inheritance <span class="tag p">PYQ ES24-1c</span><span class="tag p">PYQ ES25-2b</span><span class="tag p">PYQ MS25-3b</span><span class="tag p">PYQ MS24-2b</span><span class="tag l">Lab 4</span></h2>
+<p><b>Inheritance</b> is the mechanism by which a class (<b>subclass / child / derived</b>) acquires the fields and methods of another class (<b>superclass / parent / base</b>) using <code>extends</code>. It models an <b>IS-A</b> relationship: a Dog <i>is an</i> Animal.</p>
+<p><b>What is inherited:</b> public and protected members (and package-private ones within the same package). <b>Not inherited:</b> private members (they exist in the object but can't be accessed directly) and constructors.</p>
+<p><b>How it helps create new classes quickly and promotes reuse (ES25-2b, ES24-1c):</b> the subclass gets all the tested parent code for free. It only writes what's <i>new</i> (extension) or <i>different</i> (overriding). Common code lives in one place, and polymorphic code written for the parent works for every child.</p>
+<div class="box lab"><b>Lab 4: Animal → Dog, Cat</b></div>
+<pre><code class="language-java">class Animal {
+    protected String name;
+    protected int age;
+
+    Animal(String name, int age) { this.name = name; this.age = age; }
+
+    void eat()   { System.out.println(name + &quot; is eating&quot;); }
+    void sleep() { System.out.println(name + &quot; is sleeping&quot;); }
+    void sound() { System.out.println(name + &quot; makes a sound&quot;); }
+}
+
+class Dog extends Animal {
+    private String breed;                          // extension: new field
+    Dog(String name, int age, String breed) {
+        super(name, age);                          // reuse parent constructor
+        this.breed = breed;
+    }
+    @Override void sound() { System.out.println(name + &quot; barks: Woof!&quot;); }   // overriding
+    void fetch() { System.out.println(name + &quot; the &quot; + breed + &quot; fetches the ball&quot;); } // new method
+}
+
+class Cat extends Animal {
+    Cat(String name, int age) { super(name, age); }
+    @Override void sound() { System.out.println(name + &quot; meows: Meow!&quot;); }
+    void climb() { System.out.println(name + &quot; climbs a tree&quot;); }
+}
+
+public class Zoo {
+    public static void main(String[] args) {
+        Dog d = new Dog(&quot;Bruno&quot;, 3, &quot;Labrador&quot;);
+        Cat c = new Cat(&quot;Kitty&quot;, 2);
+        d.eat();  d.sound(); d.fetch();      // eat() inherited, sound() overridden
+        c.sleep(); c.sound(); c.climb();
+
+        Animal a = new Dog(&quot;Rex&quot;, 5, &quot;Beagle&quot;);  // upcasting
+        a.sound();                               // Rex barks (runtime polymorphism)
+        // a.fetch();                            // compile error - Animal has no fetch()
+        if (a instanceof Dog dog) dog.fetch();   // downcast with pattern matching (Java 16+)
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Bruno is eating
+Bruno barks: Woof!
+Bruno the Labrador fetches the ball
+Kitty is sleeping
+Kitty meows: Meow!
+Kitty climbs a tree
+Rex barks: Woof!
+Rex the Beagle fetches the ball</code></pre>
+<h3 id="inhtypes">Types of inheritance <span class="tag p">PYQ MS25-3b</span><span class="tag p">PYQ MS24-2b</span></h3>
+<div class="diagram"> Single        Multilevel       Hierarchical          Multiple*            Hybrid*
+   A             A                  A               A      B            A
+   │             │               ┌──┼──┐             \    /            / \
+   B             B               B  C  D              \  /            B   C
+                 │                                     C               \ /
+                 C                                                      D
+ * Multiple and hybrid inheritance of CLASSES are NOT supported in Java.
+   They are achieved through INTERFACES.</div><pre><code class="language-java">// Single
+class A { void a(){ System.out.println(&quot;A&quot;); } }
+class B extends A { void b(){ System.out.println(&quot;B&quot;); } }
+
+// Multilevel:  Grandparent → Parent → Child  (a chain)
+class Vehicle         { void move()  { System.out.println(&quot;moving&quot;); } }
+class Car extends Vehicle  { void drive() { System.out.println(&quot;driving&quot;); } }
+class SportsCar extends Car { void turbo() { System.out.println(&quot;turbo!&quot;); } }
+
+// Hierarchical: one parent, many children (siblings)
+class Shape { void draw(){ System.out.println(&quot;shape&quot;); } }
+class Circle extends Shape { @Override void draw(){ System.out.println(&quot;circle&quot;); } }
+class Square extends Shape { @Override void draw(){ System.out.println(&quot;square&quot;); } }
+
+// Multiple via interfaces
+interface Printable { void print(); }
+interface Scannable { void scan(); }
+class AllInOne implements Printable, Scannable {
+    public void print(){ System.out.println(&quot;print&quot;); }
+    public void scan() { System.out.println(&quot;scan&quot;); }
+}
+
+public class InheritanceTypes {
+    public static void main(String[] args) {
+        SportsCar s = new SportsCar();
+        s.move(); s.drive(); s.turbo();         // multilevel: has ALL ancestors&#x27; methods
+        new Circle().draw(); new Square().draw();  // hierarchical: siblings share the parent
+        // Circle and Square do NOT know each other&#x27;s methods
+    }
+}</code></pre><table><tr><th>Multilevel</th><th>Hierarchical</th></tr>
+<tr><td>A chain: A → B → C</td><td>A tree: A → B, A → C</td></tr>
+<tr><td>Each class has <b>one child</b> (usually)</td><td>One parent has <b>many children</b></td></tr>
+<tr><td>The bottom class inherits from <b>all ancestors</b></td><td>Siblings inherit only from the common parent, not from each other</td></tr>
+<tr><td>Example: Animal → Mammal → Dog</td><td>Example: Shape → Circle, Square, Triangle</td></tr></table>
+
+<h3 id="super">The <code>super</code> keyword <span class="tag p">PYQ MS26-3a</span></h3>
+<ol><li><code>super(args)</code>: calls the parent constructor. It must be the <b>first statement</b> in the child's constructor.</li>
+<li><code>super.method()</code>: calls the parent's version of an overridden method.</li>
+<li><code>super.field</code>: accesses a parent field hidden by a child field with the same name.</li></ol>
+<pre><code class="language-java">class Parent { String name = &quot;parent&quot;; void show(){ System.out.println(&quot;Parent.show&quot;); } }
+class Child extends Parent {
+    String name = &quot;child&quot;;                       // hides Parent.name
+    @Override void show() {
+        super.show();                            // reuse parent behaviour
+        System.out.println(&quot;Child.show; super.name=&quot; + super.name + &quot;, name=&quot; + name);
+    }
+}</code></pre>
+<h3 id="final">The <code>final</code> keyword</h3>
+<ul><li><code>final</code> variable: a constant that can be assigned only once.</li>
+<li><code>final</code> method: can't be overridden.</li>
+<li><code>final</code> class: can't be extended (<code>String</code>, <code>Integer</code>).</li></ul>
+<div class="box tip"><b>Composition vs inheritance</b>Use inheritance only for a real IS-A relationship where the subclass can stand in everywhere the parent is expected (the <b>Liskov Substitution Principle</b>). Otherwise use composition. It is more flexible, can change at runtime, and doesn't expose the parent's internals.</div>
+</main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>

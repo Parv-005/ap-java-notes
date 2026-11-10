@@ -1,0 +1,324 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Java Basics</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Java Fundamentals</h1>
+<p class="sub">Not listed separately in the syllabus, but asked again and again in the PYQs (mainly Mid-Sem Sep 2025). Learn this before Unit 1.</p>
+<div class="box tip"><b>How to read the tags</b>
+<span class="tag p">PYQ MS25-1a</span> = the PYQ paper and question number. Paper codes: <b>MS24</b> Mid-Sem Sep 2024 · <b>ES24</b> End-Sem Dec 2024 · <b>MS25</b> Mid-Sem Sep 2025 · <b>ES25</b> End-Sem Dec 2025 · <b>MJ26</b> Mid-Sem Jun 2026 (summer) · <b>EJ26</b> End-Sem Jul 2026 (summer) · <b>MS26</b> Mid-Sem Sep 2026.
+<span class="tag l">Lab 1</span> = a practical from the lab syllabus.</div>
+
+<h2 id="platform">Platform Independence <span class="tag p">PYQ MS25-1a</span></h2>
+<p>Java's motto is <b>"Write Once, Run Anywhere" (WORA)</b>. A Java program compiled on Windows runs unchanged on Linux or macOS. This works because the compiler does <b>not</b> produce machine code for a particular CPU. It produces <b>bytecode</b>, which is a set of instructions for an imaginary machine called the <b>Java Virtual Machine (JVM)</b>.</p>
+<div class="diagram"> Hello.java ──javac──▶ Hello.class (bytecode, same file for every OS)
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+   JVM for Windows      JVM for Linux        JVM for macOS
+          │                   │                   │
+   x86 machine code     x86/ARM machine code  ARM machine code</div><ol>
+<li><b>Compilation:</b> <code>javac Hello.java</code> checks syntax and types, then writes <code>Hello.class</code> containing bytecode.</li>
+<li><b>Class loading:</b> <code>java Hello</code> starts the JVM. The <i>ClassLoader</i> loads the <code>.class</code> file.</li>
+<li><b>Bytecode verification:</b> the verifier checks the bytecode is safe (see <a href="#security">Security</a>).</li>
+<li><b>Execution:</b> the JVM <i>interprets</i> the bytecode. Frequently-run ("hot") code is compiled to native machine code by the <b>JIT (Just-In-Time) compiler</b> for speed.</li>
+</ol>
+<p>So the <i>bytecode</i> is platform independent, but the <i>JVM</i> itself is platform <b>dependent</b>: each OS needs its own JVM. Fixed-size primitive types also help: an <code>int</code> is always 32 bits on every platform, unlike C where its size depends on the machine.</p>
+
+<h2 id="jdk">JDK vs JRE vs JVM <span class="tag p">PYQ MS25-1b</span></h2>
+<div class="diagram">┌──────────────────────── JDK ────────────────────────┐
+│  javac, javadoc, jdb, jar, jshell ...  (dev tools)   │
+│  ┌──────────────────── JRE ───────────────────────┐  │
+│  │  Class libraries (java.lang, java.util, ...)    │  │
+│  │  ┌──────────────── JVM ──────────────────────┐  │  │
+│  │  │ ClassLoader · Verifier · Interpreter · JIT │  │  │
+│  │  │ Garbage Collector · Runtime data areas     │  │  │
+│  │  └────────────────────────────────────────────┘  │  │
+│  └─────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘</div><table>
+<tr><th></th><th>JVM</th><th>JRE</th><th>JDK</th></tr>
+<tr><td>Full form</td><td>Java Virtual Machine</td><td>Java Runtime Environment</td><td>Java Development Kit</td></tr>
+<tr><td>What it is</td><td>Abstract machine that runs bytecode</td><td>JVM + standard libraries</td><td>JRE + development tools</td></tr>
+<tr><td>Purpose</td><td>Execute <code>.class</code> files</td><td>Run Java apps</td><td>Write, compile, debug and run</td></tr>
+<tr><td>Contains</td><td>Class loader, interpreter, JIT, GC</td><td>JVM, rt libraries</td><td>javac, jar, javadoc, jdb + JRE</td></tr>
+<tr><td>Who needs it</td><td>-</td><td>End users</td><td>Developers</td></tr>
+<tr><td>Platform dependent?</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+</table>
+<p class="sub">Note: since Java 11, Oracle no longer ships a separate JRE download. The idea is still examined.</p>
+
+<h2 id="main">The <code>main</code> method <span class="tag p">PYQ MS25-2a</span></h2>
+<pre><code class="language-java">public class Hello {
+    public static void main(String[] args) {
+        System.out.println(&quot;Hello, &quot; + (args.length &gt; 0 ? args[0] : &quot;World&quot;));
+    }
+}</code></pre><table>
+<tr><th>Keyword</th><th>Why it is there</th></tr>
+<tr><td><code>public</code></td><td>The JVM calls main from outside the class, so it must be accessible from anywhere.</td></tr>
+<tr><td><code>static</code></td><td>The JVM calls it <i>before any object exists</i>. A static method belongs to the class, so no object is needed.</td></tr>
+<tr><td><code>void</code></td><td>main returns nothing to the JVM. Use <code>System.exit(code)</code> to send an exit status.</td></tr>
+<tr><td><code>main</code></td><td>The fixed name the JVM looks for.</td></tr>
+<tr><td><code>String[] args</code></td><td>Command-line arguments. <code>java Hello Parv</code> gives <code>args[0] = "Parv"</code>.</td></tr>
+</table>
+<p><b>Can we change the signature?</b></p>
+<ul>
+<li>Allowed: <code>static public void main(String[] args)</code> (modifier order), <code>String args[]</code>, <code>String... args</code> (varargs), any parameter name, adding <code>final</code> or <code>synchronized</code>.</li>
+<li>Not allowed as an entry point: removing <code>public</code> or <code>static</code>, changing the return type, or changing the parameter type. It still <b>compiles</b>, but running fails with <i>"Main method not found"</i>.</li>
+<li>You <b>can overload</b> main (for example <code>main(int x)</code>). The JVM only calls the <code>String[]</code> version.</li>
+<li>Java 21+ preview (instance main methods) relaxes these rules. For exams, give the classic answer.</li>
+</ul>
+
+<h2 id="types">Data types, type casting: widening vs narrowing <span class="tag p">PYQ MS25-3a</span></h2>
+<p>Java has 8 <b>primitive types</b>: <code>byte</code>(8 bit), <code>short</code>(16), <code>int</code>(32), <code>long</code>(64), <code>float</code>(32), <code>double</code>(64), <code>char</code>(16, Unicode), <code>boolean</code>. Everything else (arrays, String, your classes) is a <b>reference type</b>.</p>
+<p><b>Type casting</b> converts a value from one type to another.</p>
+<div class="diagram">Widening (automatic, safe):
+byte → short → int → long → float → double
+              char ↗
+Narrowing (explicit cast, may lose data): the reverse direction</div><pre><code class="language-java">int i = 100;
+long l = i;          // widening: implicit, no data loss
+double d = l;        // widening: 100.0
+
+double pi = 3.99;
+int n = (int) pi;    // narrowing: explicit, decimal part dropped → 3
+int big = 300;
+byte b = (byte) big; // narrowing overflow: 300 - 256 = 44
+
+// Reference casting
+Object o = &quot;hello&quot;;          // upcasting (implicit)
+String s = (String) o;       // downcasting (explicit, checked at runtime)
+Integer x = (Integer) o;     // compiles, but throws ClassCastException at runtime</code></pre><table>
+<tr><th>Widening (implicit)</th><th>Narrowing (explicit)</th></tr>
+<tr><td>Smaller type → larger type</td><td>Larger type → smaller type</td></tr>
+<tr><td>Done automatically by the compiler</td><td>Needs a cast operator <code>(type)</code></td></tr>
+<tr><td>No data loss (except some precision for long→float)</td><td>Possible data loss, truncation or overflow</td></tr>
+<tr><td><code>double d = 10;</code></td><td><code>int i = (int) 10.7;</code></td></tr>
+</table>
+<p><b>Autoboxing and unboxing:</b> automatic conversion between primitives and their wrapper classes (<code>int ↔ Integer</code>). Example: <code>List&lt;Integer&gt; l; l.add(5);</code></p>
+
+<h2 id="passby">Pass by value vs pass by reference <span class="tag p">PYQ MS25-2b</span></h2>
+<p><b>Pass by value:</b> the method receives a <i>copy</i> of the argument, so changing the parameter doesn't affect the caller. <b>Pass by reference:</b> the method receives an alias to the caller's variable, so reassigning it changes the caller's variable (C++ <code>int&amp;</code>).</p>
+<div class="box warn"><b>Java is ALWAYS pass by value.</b> For objects, the value that gets copied is the <i>reference</i> (the address). The method can therefore <b>modify the object's state</b> through the copied reference, but it <b>cannot make the caller's variable point to a different object</b>.</div>
+<pre><code class="language-java">class Box { int v; Box(int v){ this.v = v; } }
+
+public class PassDemo {
+    static void changePrimitive(int x) { x = 99; }
+    static void changeState(Box b)     { b.v = 99; }          // modifies the shared object
+    static void reassign(Box b)        { b = new Box(-1); }   // only the local copy changes
+
+    public static void main(String[] args) {
+        int a = 5;  changePrimitive(a);  System.out.println(a);   // 5
+        Box box = new Box(5);
+        changeState(box); System.out.println(box.v);             // 99
+        reassign(box);    System.out.println(box.v);             // still 99
+    }
+}</code></pre><p><b>Classic proof:</b> a <code>swap(Box a, Box b)</code> method cannot swap the caller's two variables in Java, but it can in C++ with references.</p>
+
+<h2 id="security">How Java ensures security <span class="tag p">PYQ MS25-4a</span></h2>
+<ol>
+<li><b>No explicit pointers:</b> you can't do pointer arithmetic or read arbitrary memory.</li>
+<li><b>Bytecode verifier:</b> before execution, the verifier checks that the bytecode follows Java's rules. It checks for no stack overflow or underflow, correct types for operations, no illegal casts, no jumps into the middle of instructions, access modifiers respected, and final classes/methods not overridden. This protects against hand-crafted or tampered <code>.class</code> files.</li>
+<li><b>Class loader:</b> separates classes into namespaces (bootstrap → platform → application loaders, using <i>parent delegation</i>). A malicious class can't replace core classes such as <code>java.lang.String</code>.</li>
+<li><b>Sandboxing:</b> untrusted code runs in a restricted environment with limited access to the file system, network and system properties. Historically this was the <code>SecurityManager</code> and applets; it is deprecated since Java 17, and modern sandboxing uses containers and the module system.</li>
+<li><b>Automatic memory management:</b> garbage collection removes dangling pointers and double-free bugs. Array bounds are always checked, so buffer overflows aren't possible.</li>
+<li><b>Exception handling, strong typing</b>, and security APIs (JCA: cryptography, <code>java.security</code>, TLS).</li>
+</ol>
+
+<h2 id="create">Ways to create an object (without <code>new</code>?) <span class="tag p">PYQ MS25-4b</span></h2>
+<p>Yes. Objects can be created without writing <code>new</code> in your code:</p>
+<pre><code class="language-java">// 1. new keyword (normal)
+Student s1 = new Student(&quot;A&quot;);
+
+// 2. Reflection
+Student s2 = Student.class.getDeclaredConstructor(String.class).newInstance(&quot;B&quot;);
+
+// 3. clone()  (class must implement Cloneable) - constructor NOT called
+Student s3 = (Student) s1.clone();
+
+// 4. Deserialization - constructor NOT called
+ObjectInputStream in = new ObjectInputStream(new FileInputStream(&quot;s.ser&quot;));
+Student s4 = (Student) in.readObject();
+
+// 5. Factory / static methods (they use new internally)
+List&lt;String&gt; list = List.of(&quot;x&quot;, &quot;y&quot;);
+Integer i = Integer.valueOf(5);
+String str = &quot;literal&quot;;   // String literal from the string pool</code></pre>
+<h2 id="this">The <code>this</code> keyword <span class="tag p">PYQ MS25-5a</span></h2>
+<p><code>this</code> is a reference to the <b>current object</b>, the object on which the method or constructor was called. Uses:</p>
+<pre><code class="language-java">public class Employee {
+    private String name;
+    private double salary;
+
+    // 1. Resolve name clash between field and parameter (shadowing)
+    public Employee(String name, double salary) {
+        this.name = name;          // this.name = field, name = parameter
+        this.salary = salary;
+    }
+    // 2. Constructor chaining: call another constructor of the same class (must be the first statement)
+    public Employee(String name) { this(name, 30000); }
+
+    // 3. Return current object → method chaining (builder style)
+    public Employee raise(double pct) { salary += salary * pct / 100; return this; }
+
+    // 4. Pass current object as argument
+    public void register(Registry r) { r.add(this); }
+
+    // 5. Call another method of the current object (implicit, usually omitted)
+    public void print() { this.display(); }
+    private void display() { System.out.println(name + &quot; &quot; + salary); }
+}
+// usage: new Employee(&quot;Ravi&quot;).raise(10).raise(5).print();</code></pre><p><code>this</code> can't be used inside a <code>static</code> method because there is no current object.</p>
+
+<h2 id="access">Access modifiers (levels of access protection) <span class="tag p">PYQ ES25-2c</span></h2>
+<table>
+<tr><th>Modifier</th><th>Same class</th><th>Same package</th><th>Subclass (other pkg)</th><th>World</th></tr>
+<tr><td><code>private</code></td><td>✔</td><td>✘</td><td>✘</td><td>✘</td></tr>
+<tr><td><i>default</i> (no keyword, package-private)</td><td>✔</td><td>✔</td><td>✘</td><td>✘</td></tr>
+<tr><td><code>protected</code></td><td>✔</td><td>✔</td><td>✔ (via inheritance)</td><td>✘</td></tr>
+<tr><td><code>public</code></td><td>✔</td><td>✔</td><td>✔</td><td>✔</td></tr>
+</table>
+<ul><li>A top-level class can only be <code>public</code> or default.</li>
+<li>When overriding, you can't reduce visibility (a <code>public</code> method can't become <code>protected</code>).</li>
+<li>Rule of thumb: make fields <code>private</code>, and give methods the least visibility they need (this is encapsulation).</li></ul>
+<pre><code class="language-java">package bank;
+public class Account {
+    private double balance;          // only Account
+    String branch;                   // anything in package bank
+    protected void audit() {}        // bank.* + subclasses anywhere
+    public double getBalance() { return balance; }  // everyone
+}</code></pre>
+<h2 id="package">Packages <span class="tag p">PYQ ES25-1a(ii)</span></h2>
+<p>A <b>package</b> is a namespace that groups related classes and interfaces, like a folder.</p>
+<ul><li><b>Benefits:</b> avoids name clashes (<code>java.util.Date</code> vs <code>java.sql.Date</code>), controls access (package-private), keeps code organised and modular, and makes reuse easier.</li>
+<li><b>Built-in:</b> <code>java.lang</code> (auto-imported), <code>java.util</code>, <code>java.io</code>, <code>java.net</code>, <code>java.sql</code>.</li>
+<li><b>User-defined:</b> declared with <code>package</code> as the first statement. The directory structure must match.</li></ul>
+<pre><code class="language-java">// file: com/college/util/MathUtil.java
+package com.college.util;
+public class MathUtil { public static int sq(int x){ return x*x; } }
+
+// file: App.java
+import com.college.util.MathUtil;     // or: import com.college.util.*;
+import static java.lang.Math.PI;      // static import
+public class App { public static void main(String[] a){ System.out.println(MathUtil.sq(4) + PI); } }</code></pre><pre><code class="nohighlight">javac -d . com/college/util/MathUtil.java App.java
+java App</code></pre>
+<h2 id="methods">Methods and invoking them from outside a class <span class="tag p">PYQ MS24-2a</span></h2>
+<p>A <b>method</b> is a named block of code that does a task. It has a modifier, return type, name, parameter list and body: <code>access returnType name(params) { body }</code>. Methods define an object's <i>behaviour</i>.</p>
+<ul><li><b>Instance method:</b> called on an object: <code>obj.method()</code>.</li>
+<li><b>Static method:</b> called on the class: <code>ClassName.method()</code>.</li>
+<li>To call it from outside the class, it must be visible (<code>public</code>, or default within the same package).</li></ul>
+<pre><code class="language-java">class Calculator {
+    public int add(int a, int b) { return a + b; }           // instance method
+    public static int square(int x) { return x * x; }        // static method
+    private void secret() {}                                 // not callable from outside
+}
+public class Main {
+    public static void main(String[] args) {
+        Calculator c = new Calculator();
+        System.out.println(c.add(2, 3));             // 5   via object reference
+        System.out.println(Calculator.square(4));    // 16  via class name
+        // c.secret();  // compile error: secret() has private access
+    }
+}</code></pre>
+<h2 id="gc">Destructors? Garbage collection <span class="tag p">PYQ MS24-3a</span></h2>
+<p><b>Java has no destructors.</b> Memory is reclaimed automatically by the <b>Garbage Collector (GC)</b> when an object is no longer reachable from any live reference.</p>
+<ul><li>An object becomes eligible for GC when: the reference is set to <code>null</code>, it is reassigned to another object, or the object was created inside a method that has returned.</li>
+<li><code>System.gc()</code> only <i>requests</i> a GC. It isn't guaranteed to run.</li>
+<li><code>finalize()</code> was the closest thing to a destructor. It is unreliable and <b>deprecated since Java 9</b>.</li>
+<li>For releasing resources such as files or sockets, use <b>try-with-resources</b> and <code>AutoCloseable</code>.</li></ul>
+
+<h2 id="control">Operators and control structures <span class="tag l">Lab 1</span> <span class="tag l">Lab 2</span></h2>
+<div class="box lab"><b>Lab 1: Calculator (+, −, ×, ÷)</b></div>
+<pre><code class="language-java">import java.util.Scanner;
+
+public class Calculator {
+    static double calculate(double a, double b, char op) {
+        switch (op) {
+            case &#x27;+&#x27;: return a + b;
+            case &#x27;-&#x27;: return a - b;
+            case &#x27;*&#x27;: return a * b;
+            case &#x27;/&#x27;:
+                if (b == 0) throw new ArithmeticException(&quot;Division by zero&quot;);
+                return a / b;
+            default: throw new IllegalArgumentException(&quot;Unknown operator: &quot; + op);
+        }
+    }
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        while (true) {
+            System.out.print(&quot;Enter expression (e.g. 4 * 5) or &#x27;q&#x27; to quit: &quot;);
+            String first = sc.next();
+            if (first.equalsIgnoreCase(&quot;q&quot;)) break;
+            try {
+                double a = Double.parseDouble(first);
+                char op  = sc.next().charAt(0);
+                double b = sc.nextDouble();
+                System.out.println(&quot;Result = &quot; + calculate(a, b, op));
+            } catch (ArithmeticException | IllegalArgumentException e) {
+                System.out.println(&quot;Error: &quot; + e.getMessage());
+            }
+        }
+        sc.close();
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Enter expression (e.g. 4 * 5) or &#x27;q&#x27; to quit: 12 / 4
+Result = 3.0
+Enter expression (e.g. 4 * 5) or &#x27;q&#x27; to quit: 5 / 0
+Error: Division by zero</code></pre><p><b>Integer division:</b> <code>7/2 = 3</code> (int), <code>7/2.0 = 3.5</code>. <code>%</code> gives the remainder. Integer division by 0 throws <code>ArithmeticException</code>, while double division by 0 gives <code>Infinity</code>.</p>
+
+<div class="box lab"><b>Lab 2: if / else / switch / for / while / do-while</b></div>
+<pre><code class="language-java">public class ControlStructures {
+    public static void main(String[] args) {
+        int marks = 78;
+
+        // if - else if - else
+        if (marks &gt;= 90)      System.out.println(&quot;Grade A+&quot;);
+        else if (marks &gt;= 75) System.out.println(&quot;Grade A&quot;);
+        else if (marks &gt;= 50) System.out.println(&quot;Grade B&quot;);
+        else                  System.out.println(&quot;Fail&quot;);
+
+        // switch (classic, with fall-through prevented by break)
+        int day = 3;
+        switch (day) {
+            case 1: System.out.println(&quot;Mon&quot;); break;
+            case 2: System.out.println(&quot;Tue&quot;); break;
+            case 3: System.out.println(&quot;Wed&quot;); break;
+            default: System.out.println(&quot;Other&quot;);
+        }
+        // switch expression (Java 14+)
+        String type = switch (day) { case 6, 7 -&gt; &quot;Weekend&quot;; default -&gt; &quot;Weekday&quot;; };
+        System.out.println(type);
+
+        // for: multiplication table
+        for (int i = 1; i &lt;= 5; i++) System.out.print(7 * i + &quot; &quot;);
+        System.out.println();
+
+        // enhanced for
+        int[] arr = {3, 1, 4};
+        for (int x : arr) System.out.print(x + &quot; &quot;);
+        System.out.println();
+
+        // while: sum of digits (condition checked first, may run 0 times)
+        int n = 1234, sum = 0;
+        while (n &gt; 0) { sum += n % 10; n /= 10; }
+        System.out.println(&quot;Digit sum = &quot; + sum);
+
+        // do-while: body runs at least once
+        int k = 10;
+        do { System.out.println(&quot;do-while ran with k=&quot; + k); k++; } while (k &lt; 5);
+
+        // break &amp; continue
+        for (int i = 1; i &lt;= 10; i++) {
+            if (i % 2 == 0) continue;   // skip evens
+            if (i &gt; 7) break;           // stop loop
+            System.out.print(i + &quot; &quot;);  // 1 3 5 7
+        }
+    }
+}</code></pre><table><tr><th>while</th><th>do-while</th></tr>
+<tr><td>Entry-controlled: condition checked before the body</td><td>Exit-controlled: condition checked after the body</td></tr>
+<tr><td>May execute 0 times</td><td>Executes at least once</td></tr>
+<tr><td><code>while(c){...}</code></td><td><code>do{...}while(c);</code> (note the semicolon)</td></tr></table>
+
+<h2 id="strings">Strings: <code>==</code> vs <code>equals()</code> <span class="tag p">PYQ MS26-3b</span></h2>
+<p>Covered in detail in <a href="unit2.html#equals">Unit 2 → equals()</a>. Short version: <code>==</code> compares <b>references</b> (same object?). <code>equals()</code> compares <b>content</b>, for classes that override it, like String.</p>
+</main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>

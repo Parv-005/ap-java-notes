@@ -1,0 +1,893 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit 5 · Concurrency & Patterns</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Unit 5: Synchronization, Memory Model and Design Patterns</h1>
+<p class="sub">Race conditions · mutual exclusion · monitor locks · wait/notify · deadlocks · Java Memory Model · producer-consumer · 15 GoF design patterns</p>
+
+<h2 id="race">Race Conditions <span class="tag p">PYQ ES25-5a</span><span class="tag p">PYQ EJ26-5a</span><span class="tag p">PYQ ES24-5c</span></h2>
+<p>A <b>race condition</b> happens when two or more threads access <b>shared mutable data</b> at the same time, at least one of them <b>writes</b>, and the final result <b>depends on the unpredictable timing</b> (interleaving) of the threads. The code containing the shared access is called the <b>critical section</b>.</p>
+<p><b>Why <code>count++</code> isn't safe:</b> it looks like one operation, but it is three: <b>read</b> count → <b>add</b> 1 → <b>write</b> back (read-modify-write). Two threads can interleave like this:</p>
+<div class="diagram"> count = 5
+ Thread A: read 5 ─────────── add → 6 ── write 6
+ Thread B:        read 5 ── add → 6 ──────────────── write 6
+ Result: 6   (expected 7) → one update is LOST</div><pre><code class="language-java">class Counter {
+    private int count = 0;
+    void increment() { count++; }          // NOT atomic → race condition
+    int get() { return count; }
+}
+public class RaceDemo {
+    public static void main(String[] args) throws InterruptedException {
+        Counter c = new Counter();
+        Runnable job = () -&gt; { for (int i = 0; i &lt; 100_000; i++) c.increment(); };
+        Thread t1 = new Thread(job), t2 = new Thread(job);
+        t1.start(); t2.start(); t1.join(); t2.join();
+        System.out.println(&quot;Expected 200000, got &quot; + c.get());
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Expected 200000, got 137512      ← different on every run</code></pre><p>Other forms: <b>check-then-act</b> (<code>if (!map.containsKey(k)) map.put(k, v);</code>), lazy initialisation (<code>if (instance == null) instance = new X();</code>), and iterating a collection while another thread modifies it.</p>
+
+<h2 id="mutex">Mutual Exclusion and Synchronization <span class="tag p">PYQ ES24-5a</span><span class="tag p">PYQ ES25-5a</span><span class="tag l">Lab 12</span></h2>
+<p><b>Mutual exclusion (mutex)</b> guarantees that <b>at most one thread at a time</b> runs a critical section on the same shared resource. <b>Synchronization</b> is the general term for coordinating threads: mutual exclusion plus <b>ordering and visibility</b> (making one thread's writes visible to others) and <b>cooperation</b> (wait/notify).</p>
+<p><b>Ways to get it in Java:</b> ① <code>synchronized</code> methods ② <code>synchronized</code> blocks ③ static synchronized methods (class-level lock) ④ explicit locks: <code>ReentrantLock</code>, <code>ReadWriteLock</code> ⑤ atomic variables (<code>AtomicInteger</code>, which uses lock-free CAS) ⑥ concurrent collections (<code>ConcurrentHashMap</code>, <code>BlockingQueue</code>) ⑦ immutability and thread confinement (avoid sharing altogether).</p>
+
+<h3 id="monitor">Monitor locks (intrinsic locks) <span class="tag p">PYQ ES24-5c</span></h3>
+<p>Every Java object has an associated <b>monitor</b>, also called the <b>intrinsic lock</b> or monitor lock. A monitor provides:</p>
+<ul><li><b>Mutual exclusion:</b> only one thread can <i>own</i> the monitor at a time.</li>
+<li><b>An entry set:</b> threads trying to enter wait here in the BLOCKED state.</li>
+<li><b>A wait set:</b> threads that called <code>wait()</code> on the object sleep here (WAITING) until notified.</li></ul>
+<p><b>How it works:</b> when a thread reaches a <code>synchronized</code> method or block, it tries to <b>acquire</b> the monitor of the lock object. If the monitor is free, the thread takes it and continues. If another thread owns it, the thread <b>blocks</b>. When the owner leaves the synchronized region, normally or through an exception, it <b>releases</b> the monitor automatically and a blocked thread can get it. Intrinsic locks are <b>reentrant</b>: a thread that already owns a lock can enter it again (a count is kept), so a synchronized method can call another synchronized method on the same object. Releasing the lock also <b>flushes</b> writes to main memory, and acquiring it <b>refreshes</b> the thread's view. That is the visibility guarantee (happens-before).</p>
+<div class="diagram">            ┌───────────────── Monitor of object obj ──────────────────┐
+  T3 ──▶    │  Entry Set (BLOCKED)    ┌──── Owner ────┐  Wait Set     │
+  T4 ──▶    │   [T3, T4]  ── acquire ▶│      T1       │  (WAITING)    │
+            │                         │ in critical   │  [T2]         │
+            │                         │ section       │──wait()──▶    │
+            │            ◀── release ─└───────────────┘◀─notify()──   │
+            └──────────────────────────────────────────────────────────┘</div><table><tr><th>Construct</th><th>Lock used</th></tr>
+<tr><td><code>synchronized void m()</code></td><td><code>this</code></td></tr>
+<tr><td><code>static synchronized void m()</code></td><td>The <code>Class</code> object (<code>Counter.class</code>)</td></tr>
+<tr><td><code>synchronized (obj) { ... }</code></td><td><code>obj</code>, any object you choose</td></tr></table>
+
+<div class="box lab"><b>Lab 12 (part 1) / EJ26-5a: eliminating the race with synchronized</b></div>
+<pre><code class="language-java">import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
+
+class SafeCounter {
+    private int count = 0;
+
+    // 1. synchronized METHOD - locks &#x27;this&#x27;
+    public synchronized void incMethod() { count++; }
+
+    // 2. synchronized BLOCK - lock only the critical section
+    public void incBlock() {
+        // non-critical work could go here, outside the lock
+        synchronized (this) { count++; }   // MUST be the same lock as incMethod (this)!
+    }
+    public synchronized int get() { return count; }
+}
+
+class LockCounter {                                  // 3. explicit ReentrantLock
+    private int count = 0;
+    private final ReentrantLock lock = new ReentrantLock();
+    void inc() {
+        lock.lock();
+        try { count++; } finally { lock.unlock(); }  // ALWAYS unlock in finally
+    }
+    int get() { return count; }
+}
+
+public class SyncDemo {
+    public static void main(String[] args) throws InterruptedException {
+        SafeCounter sc = new SafeCounter();
+        AtomicInteger atomic = new AtomicInteger();   // 4. lock-free atomic
+        LockCounter lc = new LockCounter();
+
+        Runnable job = () -&gt; {
+            for (int i = 0; i &lt; 100_000; i++) {
+                sc.incMethod(); sc.incBlock(); atomic.incrementAndGet(); lc.inc();
+            }
+        };
+        Thread[] ts = new Thread[4];
+        for (int i = 0; i &lt; 4; i++) { ts[i] = new Thread(job); ts[i].start(); }
+        for (Thread t : ts) t.join();
+        System.out.println(&quot;synchronized: &quot; + sc.get());   // 800000 (both methods)
+        System.out.println(&quot;atomic:       &quot; + atomic.get());// 400000
+        System.out.println(&quot;ReentrantLock:&quot; + lc.get());    // 400000
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">synchronized: 800000
+atomic:       400000
+ReentrantLock:400000</code></pre><div class="box warn"><b>Classic mistake (I verified it by running this)</b>If <code>incBlock</code> used <code>synchronized (someOtherObject)</code> while <code>incMethod</code> locks <code>this</code>, both would still modify <code>count</code> under <i>different</i> locks. That is still a race, and the result came out as 779120 instead of 800000. All code that touches the same shared data must use the <b>same lock</b>.</div>
+<p><b>synchronized vs ReentrantLock:</b> ReentrantLock adds <code>tryLock()</code> (with timeout), interruptible locking, a fairness option, and several <code>Condition</code>s. But you must unlock manually. <code>synchronized</code> is simpler and releases automatically.</p>
+
+<h3 id="waitnotify">Inter-thread communication: wait(), notify(), notifyAll() <span class="tag p">PYQ ES25-5c</span><span class="tag l">Lab 12</span></h3>
+<p>These are methods of <code>Object</code>, used so threads can <b>cooperate</b> instead of busy-waiting:</p>
+<ul><li><code>wait()</code>: the current thread <b>releases the monitor</b> and goes into the wait set until notified (or interrupted, or a timeout with <code>wait(ms)</code>). It must re-acquire the lock before it continues.</li>
+<li><code>notify()</code>: wakes <b>one</b> arbitrary thread waiting on that object's monitor.</li>
+<li><code>notifyAll()</code>: wakes <b>all</b> waiting threads. They then compete for the lock. This is safer when there are several conditions.</li></ul>
+<p><b>Rules:</b> ① call them only while <b>holding the object's lock</b> (inside <code>synchronized(obj)</code>), otherwise you get <code>IllegalMonitorStateException</code> ② always call <code>wait()</code> <b>inside a <code>while</code> loop</b> that re-checks the condition, because of <i>spurious wakeups</i> and because another thread may have changed the state first ③ <code>notify()</code> doesn't release the lock immediately. It is released when the notifier leaves the synchronized block.</p>
+<table><tr><th><code>wait()</code></th><th><code>sleep()</code></th></tr>
+<tr><td>Method of <code>Object</code></td><td>Static method of <code>Thread</code></td></tr>
+<tr><td><b>Releases</b> the lock</td><td>Does <b>not</b> release any lock</td></tr>
+<tr><td>Must be called in synchronized code</td><td>Can be called anywhere</td></tr>
+<tr><td>Woken by notify/notifyAll/interrupt/timeout</td><td>Wakes after the time or on interrupt</td></tr>
+<tr><td>For thread communication</td><td>For pausing</td></tr></table>
+<div class="box lab"><b>Lab 12 (part 2): wait/notify, two threads printing odd/even numbers alternately</b></div>
+<pre><code class="language-java">public class OddEven {
+    private int n = 1;
+    private final int MAX = 10;
+
+    synchronized void print(boolean odd) throws InterruptedException {
+        while (n &lt;= MAX) {
+            while ((n % 2 == 1) != odd) {         // not my turn → wait (in a loop!)
+                wait();
+                if (n &gt; MAX) return;
+            }
+            System.out.println(Thread.currentThread().getName() + &quot;: &quot; + n++);
+            notifyAll();                         // wake the other thread
+        }
+    }
+    public static void main(String[] args) {
+        OddEven p = new OddEven();
+        new Thread(() -&gt; { try { p.print(true);  } catch (InterruptedException e) {} }, &quot;Odd &quot;).start();
+        new Thread(() -&gt; { try { p.print(false); } catch (InterruptedException e) {} }, &quot;Even&quot;).start();
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Odd : 1
+Even: 2
+Odd : 3
+Even: 4
+...
+Even: 10</code></pre>
+<h2 id="deadlock">Deadlocks <span class="tag p">PYQ ES25-5b</span></h2>
+<p>A <b>deadlock</b> is when two or more threads are <b>blocked forever</b>, each waiting for a resource (lock) held by another thread in the group. None can go on, so the program hangs.</p>
+<h4>The four necessary conditions (Coffman conditions)</h4>
+<p>A deadlock can happen <b>only if all four hold at the same time</b>:</p>
+<ol><li><b>Mutual exclusion:</b> at least one resource can't be shared (only one thread can hold it).</li>
+<li><b>Hold and wait:</b> a thread holds at least one resource while waiting for another.</li>
+<li><b>No preemption:</b> a resource can't be taken away by force. It is released only voluntarily.</li>
+<li><b>Circular wait:</b> a cycle T1 → T2 → … → Tn → T1, where each waits for a resource held by the next.</li></ol>
+<div class="diagram">     holds            waits for
+ T1 ───────▶ Lock A ◀─────────── T2
+  │                               ▲
+  │ waits for              holds  │
+  └────────▶ Lock B ──────────────┘          (circular wait)</div><pre><code class="language-java">public class DeadlockDemo {
+    static final Object A = new Object(), B = new Object();
+
+    public static void main(String[] args) {
+        Thread t1 = new Thread(() -&gt; {
+            synchronized (A) {
+                System.out.println(&quot;T1 locked A&quot;);
+                sleep(100);
+                synchronized (B) { System.out.println(&quot;T1 locked B&quot;); }   // waits for T2&#x27;s B
+            }
+        });
+        Thread t2 = new Thread(() -&gt; {
+            synchronized (B) {                                             // opposite order!
+                System.out.println(&quot;T2 locked B&quot;);
+                sleep(100);
+                synchronized (A) { System.out.println(&quot;T2 locked A&quot;); }   // waits for T1&#x27;s A
+            }
+        });
+        t1.start(); t2.start();      // prints &quot;T1 locked A&quot;, &quot;T2 locked B&quot;, then hangs forever
+    }
+    static void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException e) {} }
+}</code></pre><h4>Prevention: break at least one condition</h4>
+<ul><li><b>Lock ordering</b> (breaks circular wait): every thread acquires locks in the same global order, for example always A then B. This is the most common fix. In the demo, make T2 lock A first.</li>
+<li><b>Timeouts</b> (breaks hold-and-wait / no-preemption): <code>if (lock.tryLock(1, SECONDS))</code>, and back off on failure.</li>
+<li><b>Acquire all locks at once</b>, or use a single coarser lock.</li>
+<li>Keep synchronized blocks small, and don't call unknown ("alien") methods while holding a lock.</li>
+<li>Use higher-level concurrency tools (<code>BlockingQueue</code>, <code>ConcurrentHashMap</code>).</li>
+<li><b>Detection:</b> <code>jstack &lt;pid&gt;</code> or a thread dump reports "Found one Java-level deadlock". <code>ThreadMXBean.findDeadlockedThreads()</code> does the same in code.</li></ul>
+<p><b>Related liveness problems:</b> <i>starvation</i> (a thread never gets CPU time or a lock), <i>livelock</i> (threads keep reacting to each other and make no progress).</p>
+
+<h2 id="jmm">Java Memory Model (JMM)</h2>
+<p>Modern CPUs have per-core <b>caches</b> and registers, and both the compiler and the CPU <b>reorder instructions</b> for speed. Without rules, a write by one thread might <b>never become visible</b> to another, or might appear in a different order. The <b>Java Memory Model</b> (JSR-133, Java 5) defines <b>when one thread's writes are guaranteed to be visible to another thread</b> and which reorderings are allowed.</p>
+<div class="diagram">  Thread 1            Thread 2
+ ┌─────────┐        ┌─────────┐
+ │ working │        │ working │      Each thread may work on a cached copy
+ │ memory  │        │ memory  │      of shared variables. Without synchronization,
+ └────┬────┘        └────┬────┘      changes may stay invisible to other threads.
+      └──────┬───────────┘
+        ┌────▼─────┐
+        │  Main    │
+        │  memory  │
+        └──────────┘</div><p><b>Three problems the JMM addresses:</b> <b>atomicity</b> (an operation can't be seen half-done), <b>visibility</b> (writes are seen by other threads), and <b>ordering</b> (the order operations appear to happen in).</p>
+<h4>Happens-before relationship</h4>
+<p>If action X <b>happens-before</b> Y, then X's effects are visible to Y. The key rules:</p>
+<ul><li><b>Program order:</b> each action in a thread happens-before later actions in the same thread.</li>
+<li><b>Monitor lock:</b> unlocking a monitor happens-before every later lock of the same monitor.</li>
+<li><b>Volatile:</b> a write to a <code>volatile</code> field happens-before every later read of it.</li>
+<li><b>Thread start:</b> <code>t.start()</code> happens-before every action in t.</li>
+<li><b>Thread join:</b> every action in t happens-before another thread returns from <code>t.join()</code>.</li>
+<li><b>Transitivity:</b> A hb B and B hb C ⇒ A hb C.</li>
+<li><b>Final fields:</b> correctly constructed objects' final fields are visible without synchronization.</li></ul>
+<h4><code>volatile</code></h4>
+<p>A <code>volatile</code> variable is always read from and written to main memory, and accesses to it aren't reordered. It guarantees <b>visibility and ordering but NOT atomicity</b>: <code>volatile int c; c++</code> is still a race. Use it for flags and one-writer status variables.</p>
+<pre><code class="language-java">public class VisibilityDemo {
+    private static volatile boolean running = true;   // remove &#x27;volatile&#x27; → loop may never stop
+
+    public static void main(String[] args) throws InterruptedException {
+        Thread worker = new Thread(() -&gt; {
+            long spins = 0;
+            while (running) spins++;                  // reads the flag every time
+            System.out.println(&quot;Stopped after &quot; + spins + &quot; spins&quot;);
+        });
+        worker.start();
+        Thread.sleep(500);
+        running = false;                              // the volatile write is visible to worker
+        worker.join();
+    }
+}</code></pre><p><b>Double-checked locking for Singleton</b> needs <code>volatile</code> (see <a href="#singleton">Singleton</a>). Without it, another thread could see a reference to a <i>partially constructed</i> object, because the writes can be reordered.</p>
+
+<h2 id="pc">Producer-Consumer Application <span class="tag p">PYQ ES24-5b</span><span class="tag p">PYQ ES25-5c</span><span class="tag p">PYQ EJ26-5b</span><span class="tag l">Lab 15</span></h2>
+<p>The <b>producer–consumer problem</b> (bounded-buffer problem) is a classic synchronization problem. <b>Producer</b> threads create data items and put them into a <b>shared buffer of fixed capacity</b>. <b>Consumer</b> threads take items out and process them. Requirements:</p>
+<ol><li>The producer must <b>wait when the buffer is full</b>.</li>
+<li>The consumer must <b>wait when the buffer is empty</b>.</li>
+<li>Only one thread may change the buffer at a time (<b>mutual exclusion</b>).</li>
+<li>A waiting thread must be <b>woken</b> when the condition changes (signalling), without busy-waiting.</li></ol>
+<p>Real-world uses: print spoolers, task/job queues, logging frameworks, message brokers (Kafka), video streaming buffers, and the thread-pool work queue itself.</p>
+<div class="diagram"> Producer(s) ──put()──▶ [ ■ ■ ■ □ □ ]  bounded buffer (capacity 5) ──take()──▶ Consumer(s)
+                 waits if FULL                                   waits if EMPTY</div>
+<h3 id="pcwait">Solution 1: wait() and notifyAll() <span class="tag p">PYQ ES25-5c</span></h3>
+<pre><code class="language-java">import java.util.LinkedList;
+import java.util.Queue;
+
+class BoundedBuffer {
+    private final Queue&lt;Integer&gt; queue = new LinkedList&lt;&gt;();
+    private final int capacity;
+    BoundedBuffer(int capacity) { this.capacity = capacity; }
+
+    public synchronized void put(int item) throws InterruptedException {
+        while (queue.size() == capacity) {           // while, not if (spurious wakeups)
+            System.out.println(&quot;  Buffer FULL - producer waits&quot;);
+            wait();                                  // release lock and sleep
+        }
+        queue.add(item);
+        System.out.println(&quot;Produced &quot; + item + &quot;  buffer=&quot; + queue);
+        notifyAll();                                 // wake consumers waiting on &#x27;empty&#x27;
+    }
+
+    public synchronized int take() throws InterruptedException {
+        while (queue.isEmpty()) {
+            System.out.println(&quot;  Buffer EMPTY - consumer waits&quot;);
+            wait();
+        }
+        int item = queue.poll();
+        System.out.println(&quot;Consumed &quot; + item + &quot;  buffer=&quot; + queue);
+        notifyAll();                                 // wake producers waiting on &#x27;full&#x27;
+        return item;
+    }
+}
+
+public class ProducerConsumer {
+    public static void main(String[] args) {
+        BoundedBuffer buf = new BoundedBuffer(3);
+
+        Thread producer = new Thread(() -&gt; {
+            try { for (int i = 1; i &lt;= 8; i++) { buf.put(i); Thread.sleep(50); } }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }, &quot;Producer&quot;);
+
+        Thread consumer = new Thread(() -&gt; {
+            try { for (int i = 1; i &lt;= 8; i++) { buf.take(); Thread.sleep(150); } }  // slower
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }, &quot;Consumer&quot;);
+
+        producer.start(); consumer.start();
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">(sample run - interleaving varies)
+Produced 1  buffer=[1]
+Consumed 1  buffer=[]
+Produced 2  buffer=[2]
+Produced 3  buffer=[2, 3]
+Produced 4  buffer=[2, 3, 4]
+Consumed 2  buffer=[3, 4]
+Produced 5  buffer=[3, 4, 5]
+  Buffer FULL - producer waits
+Consumed 3  buffer=[4, 5]
+Produced 6  buffer=[4, 5, 6]
+...</code></pre><p><b>Role of wait() and notify() here (ES25-5c):</b> <code>wait()</code> lets a thread that can't proceed (buffer full or empty) <b>give up the lock</b> and sleep without using CPU, so the other side can make progress. <code>notifyAll()</code> tells waiting threads the buffer state changed so they can re-check their condition. The <code>while</code> loop guarantees the condition really holds after waking. <code>notifyAll</code> is used instead of <code>notify</code> because producers and consumers wait on the same monitor, and <code>notify</code> could wake the wrong kind of thread.</p>
+
+<h3 id="pcbq">Solution 2: BlockingQueue (recommended) <span class="tag p">PYQ EJ26-5b</span></h3>
+<p><code>java.util.concurrent.BlockingQueue</code> does all the synchronization internally. <code>put()</code> blocks when the queue is full, and <code>take()</code> blocks when it is empty. Implementations: <code>ArrayBlockingQueue</code> (bounded), <code>LinkedBlockingQueue</code>, <code>PriorityBlockingQueue</code>, <code>SynchronousQueue</code>.</p>
+<pre><code class="language-java">import java.util.concurrent.*;
+
+public class PCBlockingQueue {
+    private static final int POISON = -1;                      // sentinel to stop consumers
+
+    public static void main(String[] args) throws InterruptedException {
+        BlockingQueue&lt;Integer&gt; q = new ArrayBlockingQueue&lt;&gt;(5);
+        int consumers = 2;
+
+        Runnable producer = () -&gt; {
+            try {
+                for (int i = 1; i &lt;= 10; i++) {
+                    q.put(i);                                  // blocks if full
+                    System.out.println(Thread.currentThread().getName() + &quot; produced &quot; + i);
+                }
+                for (int i = 0; i &lt; consumers; i++) q.put(POISON);  // one pill per consumer
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        };
+        Runnable consumer = () -&gt; {
+            try {
+                while (true) {
+                    int item = q.take();                       // blocks if empty
+                    if (item == POISON) break;
+                    System.out.println(&quot;    &quot; + Thread.currentThread().getName() + &quot; consumed &quot; + item);
+                    Thread.sleep(100);                         // simulate processing
+                }
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        };
+
+        ExecutorService pool = Executors.newFixedThreadPool(3);
+        pool.submit(producer);
+        for (int i = 0; i &lt; consumers; i++) pool.submit(consumer);
+        pool.shutdown();
+        pool.awaitTermination(10, TimeUnit.SECONDS);
+        System.out.println(&quot;All done&quot;);
+    }
+}</code></pre><p><b>Solution 3:</b> <code>ReentrantLock</code> with two <code>Condition</code> objects (<code>notFull</code>, <code>notEmpty</code>) lets you signal exactly the right group. You can also use two semaphores (empty slots / full slots) plus a mutex.</p>
+
+<h2 id="dp">Introduction to Design Patterns <span class="tag p">PYQ ES24-5b</span><span class="tag p">PYQ EJ26-5c</span><span class="tag l">Lab 14</span></h2>
+<p>A <b>design pattern</b> is a <b>general, reusable solution to a commonly occurring problem</b> in software design. It is a template or best practice, not finished code. The classic catalogue is the <b>Gang of Four (GoF)</b> book (Gamma, Helm, Johnson, Vlissides, 1994), with 23 patterns in 3 categories. Every pattern has a <i>name</i>, a <i>problem</i>, a <i>solution</i> and <i>consequences</i>.</p>
+<p><b>Role and importance of design patterns in Java (ES24-5b):</b></p>
+<ul><li>Proven, tested solutions, so you don't reinvent them.</li>
+<li>A <b>shared vocabulary</b>: "use a Strategy here" says a lot in three words.</li>
+<li>They encourage OOP principles: program to an interface, favour composition, loose coupling, Open/Closed.</li>
+<li>More maintainable, flexible and reusable code.</li>
+<li>They are used throughout the JDK: <code>Iterator</code>, <code>Runtime.getRuntime()</code> (Singleton), <code>Integer.valueOf</code> (Flyweight), <code>Arrays.asList</code> (Adapter), <code>Comparator</code> (Strategy), <code>java.io</code> streams (Decorator), <code>Calendar.getInstance()</code> (Factory), JavaFX listeners (Observer).</li></ul>
+<table>
+<tr><th>Creational (object creation)</th><th>Structural (composing classes and objects)</th><th>Behavioural (communication and responsibility)</th></tr>
+<tr><td><b>Singleton</b>, <b>Factory Method</b>, Abstract Factory, Builder, <b>Prototype</b></td><td><b>Adapter</b>, <b>Decorator</b>, <b>Facade</b>, <b>Composite</b>, <b>Proxy</b>, <b>Flyweight</b>, Bridge</td><td><b>Iterator</b>, <b>Strategy</b>, <b>Template Method</b>, <b>Observer</b>, <b>State</b>, <b>Chain of Responsibility</b>, Command, Mediator, Memento, Visitor, Interpreter</td></tr></table>
+<p class="sub">Bold = in the syllabus. The patterns below are grouped by category, which is what EJ26-5c asks for ("any two creational and any two structural").</p>
+
+<h2 id="creational">Creational Patterns</h2>
+
+<h3 id="singleton">Singleton <span class="tag l">Lab 14</span></h3>
+<p><b>Intent:</b> make sure a class has <b>only one instance</b> and give a <b>global access point</b> to it.<br>
+<b>Real-world uses:</b> configuration manager, logger, database connection pool, cache, <code>Runtime.getRuntime()</code>, the printer spooler of an OS.<br>
+<b>How:</b> a private constructor, a private static instance, and a public static <code>getInstance()</code>.</p>
+<pre><code class="language-java">// 1. Eager initialization - simple, thread-safe, created even if never used
+class EagerConfig {
+    private static final EagerConfig INSTANCE = new EagerConfig();
+    private EagerConfig() {}
+    public static EagerConfig getInstance() { return INSTANCE; }
+}
+
+// 2. Lazy + thread-safe with double-checked locking (needs volatile - see JMM)
+class Logger {
+    private static volatile Logger instance;
+    private int count = 0;
+    private Logger() { System.out.println(&quot;Logger created&quot;); }
+
+    public static Logger getInstance() {
+        if (instance == null) {                       // 1st check, no locking (fast path)
+            synchronized (Logger.class) {
+                if (instance == null)                 // 2nd check, with the lock
+                    instance = new Logger();
+            }
+        }
+        return instance;
+    }
+    public synchronized void log(String msg) { System.out.println(++count + &quot;: &quot; + msg); }
+}
+
+// 3. Bill Pugh holder idiom - lazy, thread-safe, no synchronization cost
+class Registry {
+    private Registry() {}
+    private static class Holder { static final Registry INSTANCE = new Registry(); }
+    public static Registry getInstance() { return Holder.INSTANCE; }
+}
+
+// 4. Enum singleton - safe even against reflection &amp; serialization (Effective Java)
+enum AppSettings { INSTANCE; String theme = &quot;dark&quot;; }
+
+public class SingletonDemo {
+    public static void main(String[] args) {
+        Logger a = Logger.getInstance(), b = Logger.getInstance();
+        a.log(&quot;start&quot;); b.log(&quot;still the same logger&quot;);
+        System.out.println(a == b);                   // true
+        System.out.println(AppSettings.INSTANCE.theme);
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Logger created
+1: start
+2: still the same logger
+true
+dark</code></pre>
+<h3 id="factory">Factory (Factory Method) <span class="tag l">Lab 14</span></h3>
+<p><b>Intent:</b> create objects <b>without exposing the creation logic</b> to the client. The client asks a factory for an object through a common interface, and the factory decides which concrete class to create. In the GoF <i>Factory Method</i> form, subclasses override a creation method.<br>
+<b>Real-world uses:</b> <code>Calendar.getInstance()</code>, <code>NumberFormat.getInstance()</code>, a JDBC <code>DriverManager.getConnection</code>, a notification service creating Email, SMS or Push senders, document editors creating different document types.</p>
+<pre><code class="language-java">interface Notification { void send(String to, String msg); }
+class EmailNotification implements Notification { public void send(String to, String m){ System.out.println(&quot;Email to &quot; + to + &quot;: &quot; + m); } }
+class SMSNotification   implements Notification { public void send(String to, String m){ System.out.println(&quot;SMS to &quot; + to + &quot;: &quot; + m); } }
+class PushNotification  implements Notification { public void send(String to, String m){ System.out.println(&quot;Push to &quot; + to + &quot;: &quot; + m); } }
+
+// Simple factory
+class NotificationFactory {
+    public static Notification create(String channel) {
+        return switch (channel.toLowerCase()) {
+            case &quot;email&quot; -&gt; new EmailNotification();
+            case &quot;sms&quot;   -&gt; new SMSNotification();
+            case &quot;push&quot;  -&gt; new PushNotification();
+            default -&gt; throw new IllegalArgumentException(&quot;Unknown channel &quot; + channel);
+        };
+    }
+}
+
+// GoF Factory Method: the creator defers creation to subclasses
+abstract class Dialog {
+    abstract Button createButton();                 // factory method
+    void render() { Button b = createButton(); b.paint(); }   // uses the product without knowing its class
+}
+interface Button { void paint(); }
+class WindowsDialog extends Dialog { Button createButton() { return () -&gt; System.out.println(&quot;[Windows button]&quot;); } }
+class WebDialog     extends Dialog { Button createButton() { return () -&gt; System.out.println(&quot;&lt;html button&gt;&quot;); } }
+
+public class FactoryDemo {
+    public static void main(String[] args) {
+        for (String ch : new String[]{&quot;email&quot;, &quot;sms&quot;, &quot;push&quot;})
+            NotificationFactory.create(ch).send(&quot;asha&quot;, &quot;Your order shipped&quot;);
+        Dialog d = System.getProperty(&quot;os.name&quot;).startsWith(&quot;Windows&quot;) ? new WindowsDialog() : new WebDialog();
+        d.render();
+    }
+}</code></pre><p><b>Benefits:</b> loose coupling (the client depends only on the interface), new products can be added in one place (Open/Closed), and creation logic is centralised.</p>
+
+<h3 id="prototype">Prototype</h3>
+<p><b>Intent:</b> create new objects by <b>cloning an existing instance</b> (the prototype) instead of building them from scratch. This helps when creation is expensive (database loads, heavy setup) or when you need many similar objects with small differences.<br>
+<b>Real-world uses:</b> game enemies spawned from template objects, document templates, cell division, copying shapes in a drawing editor (Ctrl+C / Ctrl+V).</p>
+<pre><code class="language-java">import java.util.*;
+
+abstract class Shape implements Cloneable {
+    String color; int x, y;
+    abstract void draw();
+    @Override public Shape clone() {
+        try { return (Shape) super.clone(); } catch (CloneNotSupportedException e) { throw new AssertionError(); }
+    }
+}
+class Circle extends Shape { int r; void draw(){ System.out.println(color + &quot; circle r=&quot; + r + &quot; at &quot; + x + &quot;,&quot; + y); } }
+class Rect   extends Shape { int w, h; void draw(){ System.out.println(color + &quot; rect &quot; + w + &quot;x&quot; + h + &quot; at &quot; + x + &quot;,&quot; + y); } }
+
+class ShapeRegistry {                                     // prototype registry
+    private final Map&lt;String, Shape&gt; protos = new HashMap&lt;&gt;();
+    void register(String key, Shape s) { protos.put(key, s); }
+    Shape create(String key) { return protos.get(key).clone(); }
+}
+
+public class PrototypeDemo {
+    public static void main(String[] args) {
+        Circle big = new Circle(); big.r = 50; big.color = &quot;red&quot;;
+        Rect card = new Rect(); card.w = 85; card.h = 54; card.color = &quot;blue&quot;;
+        ShapeRegistry reg = new ShapeRegistry();
+        reg.register(&quot;bigRedCircle&quot;, big); reg.register(&quot;card&quot;, card);
+
+        Shape s1 = reg.create(&quot;bigRedCircle&quot;); s1.x = 10;
+        Shape s2 = reg.create(&quot;bigRedCircle&quot;); s2.x = 99; s2.color = &quot;green&quot;;
+        s1.draw(); s2.draw(); big.draw();                 // prototype is unchanged
+    }
+}</code></pre>
+<h2 id="structural">Structural Patterns</h2>
+
+<h3 id="adapter">Adapter</h3>
+<p><b>Intent:</b> convert the interface of a class into another interface that clients expect, so classes with <b>incompatible interfaces</b> can work together. It is also called a <i>wrapper</i>.<br>
+<b>Real-world analogy:</b> a travel plug adapter, or a memory-card reader (SD card → USB). <b>Java:</b> <code>Arrays.asList()</code>, <code>InputStreamReader</code> (byte stream → character stream).</p>
+<pre><code class="language-java">// Target interface our app uses
+interface PaymentProcessor { void pay(double amountInRupees); }
+
+// Existing third-party class with an incompatible API (we can&#x27;t modify it)
+class PayPalSDK {
+    void makePayment(String currency, double amount) {
+        System.out.println(&quot;PayPal charged &quot; + currency + &quot; &quot; + String.format(&quot;%.2f&quot;, amount));
+    }
+}
+// Adapter: implements the target, wraps the adaptee (object adapter via composition)
+class PayPalAdapter implements PaymentProcessor {
+    private final PayPalSDK paypal = new PayPalSDK();
+    private static final double INR_PER_USD = 83.0;
+    public void pay(double inr) { paypal.makePayment(&quot;USD&quot;, inr / INR_PER_USD); }   // translate the call
+}
+class UpiProcessor implements PaymentProcessor { public void pay(double inr){ System.out.println(&quot;UPI paid ₹&quot; + inr); } }
+
+public class AdapterDemo {
+    static void checkout(PaymentProcessor p, double amt) { p.pay(amt); }   // client knows only the target
+    public static void main(String[] args) {
+        checkout(new UpiProcessor(), 830);
+        checkout(new PayPalAdapter(), 830);
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">UPI paid ₹830.0
+PayPal charged USD 10.00</code></pre>
+<h3 id="decorator">Decorator</h3>
+<p><b>Intent:</b> <b>attach extra responsibilities to an object dynamically</b> by wrapping it in decorator objects that share its interface. It is a flexible alternative to subclassing for extending behaviour, so you avoid a "class explosion" such as MilkSugarCoffee or WhipMilkCoffee.<br>
+<b>Real-world uses:</b> <code>java.io</code>: <code>new BufferedReader(new InputStreamReader(new FileInputStream(f)))</code>, <code>Collections.unmodifiableList</code>, adding toppings to a pizza or coffee, middleware layers.</p>
+<pre><code class="language-java">interface Coffee { String desc(); double cost(); }
+class Espresso implements Coffee { public String desc(){ return &quot;Espresso&quot;; } public double cost(){ return 100; } }
+
+abstract class CoffeeDecorator implements Coffee {         // has-a AND is-a Coffee
+    protected final Coffee inner;
+    CoffeeDecorator(Coffee c) { inner = c; }
+}
+class Milk extends CoffeeDecorator {
+    Milk(Coffee c) { super(c); }
+    public String desc() { return inner.desc() + &quot; + Milk&quot;; }
+    public double cost() { return inner.cost() + 30; }
+}
+class Caramel extends CoffeeDecorator {
+    Caramel(Coffee c) { super(c); }
+    public String desc() { return inner.desc() + &quot; + Caramel&quot;; }
+    public double cost() { return inner.cost() + 45; }
+}
+public class DecoratorDemo {
+    public static void main(String[] args) {
+        Coffee c = new Caramel(new Milk(new Milk(new Espresso())));   // stack decorators at runtime
+        System.out.println(c.desc() + &quot; = ₹&quot; + c.cost());
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Espresso + Milk + Milk + Caramel = ₹205.0</code></pre>
+<h3 id="facade">Facade</h3>
+<p><b>Intent:</b> give a <b>single simplified interface</b> to a complex subsystem. Clients talk to the facade instead of to many subsystem classes, which lowers coupling.<br>
+<b>Real-world uses:</b> a home-theatre "Watch movie" button, a hotel reception desk, an "Order" API that coordinates inventory, payment and shipping, <code>javax.faces.context.FacesContext</code>, SLF4J.</p>
+<pre><code class="language-java">class Inventory { boolean reserve(String item){ System.out.println(&quot;Reserved &quot; + item); return true; } }
+class Payment   { boolean charge(String user, double amt){ System.out.println(&quot;Charged &quot; + user + &quot; ₹&quot; + amt); return true; } }
+class Shipping  { String ship(String item, String addr){ System.out.println(&quot;Shipping &quot; + item + &quot; to &quot; + addr); return &quot;TRK123&quot;; } }
+class Notifier  { void email(String user, String m){ System.out.println(&quot;Email &quot; + user + &quot;: &quot; + m); } }
+
+class OrderFacade {                                        // the facade
+    private final Inventory inv = new Inventory(); private final Payment pay = new Payment();
+    private final Shipping ship = new Shipping();  private final Notifier note = new Notifier();
+    public String placeOrder(String user, String item, double price, String addr) {
+        if (!inv.reserve(item)) throw new IllegalStateException(&quot;Out of stock&quot;);
+        if (!pay.charge(user, price)) throw new IllegalStateException(&quot;Payment failed&quot;);
+        String trk = ship.ship(item, addr);
+        note.email(user, &quot;Order placed, tracking &quot; + trk);
+        return trk;
+    }
+}
+public class FacadeDemo {
+    public static void main(String[] args) {
+        new OrderFacade().placeOrder(&quot;asha&quot;, &quot;Laptop&quot;, 55000, &quot;Delhi&quot;);  // one call, four subsystems
+    }
+}</code></pre>
+<h3 id="composite">Composite</h3>
+<p><b>Intent:</b> arrange objects into <b>tree structures</b> for part–whole hierarchies, so clients treat <b>individual objects (leaves) and groups (composites) the same way</b>.<br>
+<b>Real-world uses:</b> file system (files and folders), GUI containers (a JavaFX <code>Pane</code> holds Nodes, which may themselves be Panes), organisation charts, menus and sub-menus.</p>
+<pre><code class="language-java">import java.util.*;
+
+interface FileSystemItem { long size(); void print(String indent); }
+
+class FileItem implements FileSystemItem {                 // leaf
+    private final String name; private final long size;
+    FileItem(String n, long s) { name = n; size = s; }
+    public long size() { return size; }
+    public void print(String ind) { System.out.println(ind + &quot;📄 &quot; + name + &quot; (&quot; + size + &quot; KB)&quot;); }
+}
+class Folder implements FileSystemItem {                   // composite
+    private final String name; private final List&lt;FileSystemItem&gt; children = new ArrayList&lt;&gt;();
+    Folder(String n) { name = n; }
+    Folder add(FileSystemItem i) { children.add(i); return this; }
+    public long size() { return children.stream().mapToLong(FileSystemItem::size).sum(); }   // recursion
+    public void print(String ind) {
+        System.out.println(ind + &quot;📁 &quot; + name + &quot; (&quot; + size() + &quot; KB)&quot;);
+        for (FileSystemItem c : children) c.print(ind + &quot;   &quot;);
+    }
+}
+public class CompositeDemo {
+    public static void main(String[] args) {
+        Folder root = new Folder(&quot;root&quot;)
+            .add(new FileItem(&quot;notes.txt&quot;, 4))
+            .add(new Folder(&quot;src&quot;).add(new FileItem(&quot;Main.java&quot;, 12)).add(new FileItem(&quot;Util.java&quot;, 8)))
+            .add(new Folder(&quot;img&quot;).add(new FileItem(&quot;logo.png&quot;, 120)));
+        root.print(&quot;&quot;);                                     // same call on leaf or composite
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">📁 root (144 KB)
+   📄 notes.txt (4 KB)
+   📁 src (20 KB)
+      📄 Main.java (12 KB)
+      📄 Util.java (8 KB)
+   📁 img (120 KB)
+      📄 logo.png (120 KB)</code></pre>
+<h3 id="proxy">Proxy</h3>
+<p><b>Intent:</b> provide a <b>surrogate or placeholder</b> that controls access to another object. It has the same interface as the real object. Kinds: <b>virtual proxy</b> (lazy loading of expensive objects), <b>protection proxy</b> (access control), <b>remote proxy</b> (RMI stub), <b>caching / logging proxy</b>.<br>
+<b>Real-world uses:</b> a cheque or debit card as a proxy for a bank account, Hibernate lazy loading, Spring AOP, image placeholders in documents.</p>
+<pre><code class="language-java">interface Image { void display(); }
+
+class HighResImage implements Image {
+    private final String file;
+    HighResImage(String f) { file = f; System.out.println(&quot;Loading &quot; + f + &quot; from disk (slow)...&quot;); }
+    public void display() { System.out.println(&quot;Displaying &quot; + file); }
+}
+class ImageProxy implements Image {                         // virtual + protection proxy
+    private final String file; private final String role;
+    private HighResImage real;                              // created only when needed
+    ImageProxy(String f, String role) { file = f; this.role = role; }
+    public void display() {
+        if (!role.equals(&quot;member&quot;)) { System.out.println(&quot;Access denied for &quot; + file); return; }
+        if (real == null) real = new HighResImage(file);    // lazy load
+        real.display();
+    }
+}
+public class ProxyDemo {
+    public static void main(String[] args) {
+        Image img = new ImageProxy(&quot;photo.png&quot;, &quot;member&quot;);
+        System.out.println(&quot;Proxy created (nothing loaded yet)&quot;);
+        img.display();                                      // loads now
+        img.display();                                      // cached, no reload
+        new ImageProxy(&quot;secret.png&quot;, &quot;guest&quot;).display();
+    }
+}</code></pre>
+<h3 id="flyweight">Flyweight</h3>
+<p><b>Intent:</b> <b>share</b> fine-grained objects so that large numbers of them can be supported efficiently. Split the state into <b>intrinsic</b> state (shared, immutable, stored in the flyweight) and <b>extrinsic</b> state (context-specific, passed in by the client). A <b>factory</b> caches and reuses flyweights.<br>
+<b>Real-world uses:</b> characters in a text editor (one glyph object per character, while position is extrinsic), trees in a game forest, <code>Integer.valueOf(-128..127)</code> cache, the String pool.</p>
+<pre><code class="language-java">import java.util.*;
+
+final class TreeType {                                      // flyweight: intrinsic, shared, immutable
+    final String name, color, texture;
+    TreeType(String n, String c, String t) { name = n; color = c; texture = t; }
+    void draw(int x, int y) { System.out.println(name + &quot;(&quot; + color + &quot;) at &quot; + x + &quot;,&quot; + y); }
+}
+class TreeFactory {
+    private static final Map&lt;String, TreeType&gt; cache = new HashMap&lt;&gt;();
+    static TreeType get(String n, String c, String t) {
+        return cache.computeIfAbsent(n + c + t, k -&gt; { System.out.println(&quot;  new TreeType &quot; + n); return new TreeType(n, c, t); });
+    }
+    static int count() { return cache.size(); }
+}
+record Tree(int x, int y, TreeType type) {                  // extrinsic state (x, y) per tree
+    void draw() { type.draw(x, y); }
+}
+public class FlyweightDemo {
+    public static void main(String[] args) {
+        List&lt;Tree&gt; forest = new ArrayList&lt;&gt;();
+        Random r = new Random(1);
+        for (int i = 0; i &lt; 1_000_000; i++) {
+            TreeType t = (i % 2 == 0) ? TreeFactory.get(&quot;Oak&quot;, &quot;green&quot;, &quot;oak.png&quot;) : TreeFactory.get(&quot;Pine&quot;, &quot;dark&quot;, &quot;pine.png&quot;);
+            forest.add(new Tree(r.nextInt(1000), r.nextInt(1000), t));
+        }
+        forest.get(0).draw();
+        System.out.println(forest.size() + &quot; trees share only &quot; + TreeFactory.count() + &quot; TreeType objects&quot;);
+        Integer a = 127, b = 127, c = 128, d = 128;
+        System.out.println((a == b) + &quot; &quot; + (c == d));      // true false  (JDK flyweight cache)
+    }
+}</code></pre>
+<h2 id="behavioural">Behavioural Patterns</h2>
+
+<h3 id="iterator">Iterator</h3>
+<p><b>Intent:</b> access the elements of a collection <b>one after another without exposing its internal representation</b> (array, linked list, tree). Java's <code>java.util.Iterator</code> (<code>hasNext()</code>, <code>next()</code>, <code>remove()</code>) and <code>Iterable</code> (which enables the for-each loop) are this pattern.</p>
+<pre><code class="language-java">import java.util.*;
+
+class Playlist implements Iterable&lt;String&gt; {
+    private final String[] songs; private int count;
+    Playlist(int cap) { songs = new String[cap]; }
+    void add(String s) { songs[count++] = s; }
+
+    @Override public Iterator&lt;String&gt; iterator() {          // the client never sees the array
+        return new Iterator&lt;&gt;() {
+            private int i = 0;
+            public boolean hasNext() { return i &lt; count; }
+            public String next() {
+                if (!hasNext()) throw new NoSuchElementException();
+                return songs[i++];
+            }
+        };
+    }
+    Iterator&lt;String&gt; reverseIterator() {                    // several traversal strategies
+        return new Iterator&lt;&gt;() {
+            int i = count - 1;
+            public boolean hasNext() { return i &gt;= 0; }
+            public String next() { return songs[i--]; }
+        };
+    }
+}
+public class IteratorDemo {
+    public static void main(String[] args) {
+        Playlist p = new Playlist(10);
+        p.add(&quot;Song A&quot;); p.add(&quot;Song B&quot;); p.add(&quot;Song C&quot;);
+        for (String s : p) System.out.println(&quot;▶ &quot; + s);     // for-each uses iterator()
+        Iterator&lt;String&gt; rev = p.reverseIterator();
+        while (rev.hasNext()) System.out.println(&quot;◀ &quot; + rev.next());
+    }
+}</code></pre>
+<h3 id="strategy">Strategy</h3>
+<p><b>Intent:</b> define a <b>family of algorithms</b>, put each one in its own class, and make them <b>interchangeable at runtime</b>. The context holds a reference to a strategy interface instead of hard-coding <code>if/else</code> branches.<br>
+<b>Real-world uses:</b> <code>Comparator</code> passed to <code>sort()</code>, payment methods, compression algorithms (zip/rar), route planning (car/walk/bus), discount rules.</p>
+<pre><code class="language-java">interface DiscountStrategy { double apply(double amount); }
+
+class NoDiscount      implements DiscountStrategy { public double apply(double a) { return a; } }
+class PercentDiscount implements DiscountStrategy {
+    private final double pct; PercentDiscount(double p) { pct = p; }
+    public double apply(double a) { return a * (1 - pct / 100); }
+}
+class FlatDiscount implements DiscountStrategy {
+    private final double off; FlatDiscount(double o) { off = o; }
+    public double apply(double a) { return Math.max(0, a - off); }
+}
+class ShoppingCart {                                       // context
+    private DiscountStrategy strategy = new NoDiscount();
+    void setStrategy(DiscountStrategy s) { strategy = s; } // swap at runtime
+    double checkout(double total) { return strategy.apply(total); }
+}
+public class StrategyDemo {
+    public static void main(String[] args) {
+        ShoppingCart cart = new ShoppingCart();
+        System.out.println(cart.checkout(1000));                          // 1000.0
+        cart.setStrategy(new PercentDiscount(10)); System.out.println(cart.checkout(1000)); // 900.0
+        cart.setStrategy(new FlatDiscount(250));   System.out.println(cart.checkout(1000)); // 750.0
+        cart.setStrategy(a -&gt; a &gt; 500 ? a - 100 : a);  System.out.println(cart.checkout(1000)); // lambda strategy: 900.0
+    }
+}</code></pre>
+<h3 id="template">Template Method</h3>
+<p><b>Intent:</b> define the <b>skeleton of an algorithm</b> in a base-class method (often <code>final</code>), and let subclasses <b>override specific steps</b> without changing the overall structure. This is the "Hollywood principle": <i>don't call us, we'll call you</i>.<br>
+<b>Real-world uses:</b> <code>AbstractList</code> (you give <code>get</code> and <code>size</code>), <code>HttpServlet.service()</code> calling <code>doGet</code>/<code>doPost</code>, JUnit's setUp/test/tearDown, data importers (open → parse → validate → save).</p>
+<pre><code class="language-java">abstract class DataImporter {
+    public final void importData(String src) {       // template method: fixed order
+        String raw = read(src);
+        var records = parse(raw);
+        if (validate(records)) save(records);
+        hook();
+    }
+    protected String read(String src) { System.out.println(&quot;Reading &quot; + src); return &quot;a,b;c,d&quot;; }
+    protected abstract java.util.List&lt;String&gt; parse(String raw);   // varies
+    protected boolean validate(java.util.List&lt;String&gt; r) { return !r.isEmpty(); }
+    protected void save(java.util.List&lt;String&gt; r) { System.out.println(&quot;Saved &quot; + r); }
+    protected void hook() {}                          // optional hook (empty by default)
+}
+class CsvImporter extends DataImporter {
+    protected java.util.List&lt;String&gt; parse(String raw) { return java.util.List.of(raw.split(&quot;;&quot;)); }
+}
+class JsonImporter extends DataImporter {
+    protected java.util.List&lt;String&gt; parse(String raw) { return java.util.List.of(&quot;{&quot; + raw + &quot;}&quot;); }
+    @Override protected void hook() { System.out.println(&quot;JSON import audited&quot;); }
+}
+public class TemplateDemo {
+    public static void main(String[] args) {
+        new CsvImporter().importData(&quot;data.csv&quot;);
+        new JsonImporter().importData(&quot;data.json&quot;);
+    }
+}</code></pre>
+<h3 id="observer">Observer <span class="tag l">Lab 14</span></h3>
+<p><b>Intent:</b> define a <b>one-to-many dependency</b> so that when one object (the <b>subject</b> or publisher) changes state, all its <b>observers</b> (subscribers) are <b>notified automatically</b>. Publisher and subscribers stay loosely coupled.<br>
+<b>Real-world uses:</b> YouTube channel subscriptions, newsletters, stock price tickers, GUI event listeners (JavaFX <code>button.setOnAction</code>), MVC (the model notifies views), <code>PropertyChangeListener</code>.</p>
+<pre><code class="language-java">import java.util.*;
+
+interface Observer { void update(String stock, double price); }
+
+interface Subject {
+    void subscribe(Observer o);
+    void unsubscribe(Observer o);
+    void notifyObservers();
+}
+class StockTicker implements Subject {
+    private final List&lt;Observer&gt; observers = new ArrayList&lt;&gt;();
+    private String stock; private double price;
+
+    public void subscribe(Observer o)   { observers.add(o); }
+    public void unsubscribe(Observer o) { observers.remove(o); }
+    public void notifyObservers()       { for (Observer o : observers) o.update(stock, price); }
+
+    public void setPrice(String stock, double price) {      // state change → notify
+        this.stock = stock; this.price = price;
+        notifyObservers();
+    }
+}
+class MobileApp implements Observer {
+    private final String user; MobileApp(String u) { user = u; }
+    public void update(String s, double p) { System.out.println(&quot;📱 &quot; + user + &quot;: &quot; + s + &quot; is now ₹&quot; + p); }
+}
+class TradingBot implements Observer {
+    public void update(String s, double p) { if (p &lt; 1500) System.out.println(&quot;🤖 Bot: BUY &quot; + s + &quot; at &quot; + p); }
+}
+public class ObserverDemo {
+    public static void main(String[] args) {
+        StockTicker ticker = new StockTicker();
+        Observer asha = new MobileApp(&quot;Asha&quot;), bot = new TradingBot();
+        ticker.subscribe(asha); ticker.subscribe(bot);
+        ticker.setPrice(&quot;INFY&quot;, 1550);
+        ticker.setPrice(&quot;INFY&quot;, 1480);
+        ticker.unsubscribe(asha);
+        ticker.setPrice(&quot;INFY&quot;, 1450);
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">📱 Asha: INFY is now ₹1550.0
+📱 Asha: INFY is now ₹1480.0
+🤖 Bot: BUY INFY at 1480.0
+🤖 Bot: BUY INFY at 1450.0</code></pre>
+<h3 id="state">State</h3>
+<p><b>Intent:</b> let an object <b>change its behaviour when its internal state changes</b>, so it looks as if the object changed its class. Each state is its own class implementing a common interface, and the context delegates to its current state object. This replaces large <code>switch(state)</code> blocks.<br>
+<b>Real-world uses:</b> vending machine, traffic light, order lifecycle (New → Paid → Shipped → Delivered), TCP connection, media player (Playing/Paused/Stopped), document workflow.</p>
+<pre><code class="language-java">interface OrderState {
+    void next(Order o);
+    void cancel(Order o);
+    String name();
+}
+class NewState implements OrderState {
+    public void next(Order o)   { System.out.println(&quot;Payment received&quot;); o.setState(new PaidState()); }
+    public void cancel(Order o) { System.out.println(&quot;Order cancelled&quot;);  o.setState(new CancelledState()); }
+    public String name() { return &quot;NEW&quot;; }
+}
+class PaidState implements OrderState {
+    public void next(Order o)   { System.out.println(&quot;Order shipped&quot;);    o.setState(new ShippedState()); }
+    public void cancel(Order o) { System.out.println(&quot;Refund issued&quot;);    o.setState(new CancelledState()); }
+    public String name() { return &quot;PAID&quot;; }
+}
+class ShippedState implements OrderState {
+    public void next(Order o)   { System.out.println(&quot;Order delivered&quot;);  o.setState(new DeliveredState()); }
+    public void cancel(Order o) { System.out.println(&quot;Cannot cancel - already shipped&quot;); }
+    public String name() { return &quot;SHIPPED&quot;; }
+}
+class DeliveredState implements OrderState {
+    public void next(Order o)   { System.out.println(&quot;Already delivered&quot;); }
+    public void cancel(Order o) { System.out.println(&quot;Use return process&quot;); }
+    public String name() { return &quot;DELIVERED&quot;; }
+}
+class CancelledState implements OrderState {
+    public void next(Order o)   { System.out.println(&quot;Order is cancelled&quot;); }
+    public void cancel(Order o) { System.out.println(&quot;Already cancelled&quot;); }
+    public String name() { return &quot;CANCELLED&quot;; }
+}
+class Order {                                              // context
+    private OrderState state = new NewState();
+    void setState(OrderState s) { state = s; }
+    void next()   { state.next(this); }                    // delegate to current state
+    void cancel() { state.cancel(this); }
+    String status() { return state.name(); }
+}
+public class StateDemo {
+    public static void main(String[] args) {
+        Order o = new Order();
+        o.next(); o.next(); o.cancel(); o.next();
+        System.out.println(&quot;Final: &quot; + o.status());
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Payment received
+Order shipped
+Cannot cancel - already shipped
+Order delivered
+Final: DELIVERED</code></pre><p><b>State vs Strategy:</b> they have the same structure. In Strategy the <i>client</i> picks the algorithm and strategies don't know about each other. In State, the <i>states themselves</i> trigger transitions to other states.</p>
+
+<h3 id="cor">Chain of Responsibility</h3>
+<p><b>Intent:</b> pass a request along a <b>chain of handlers</b>. Each handler either processes the request or forwards it to the next one. This decouples the sender from the receivers.<br>
+<b>Real-world uses:</b> customer-support escalation (bot → agent → manager), expense approvals by amount, servlet filters and middleware, exception propagation up the call stack, logging levels, JavaFX event bubbling.</p>
+<pre><code class="language-java">abstract class Approver {
+    private Approver next;
+    Approver setNext(Approver n) { next = n; return n; }    // returns n for fluent chaining
+    void approve(String item, double amt) {
+        if (canApprove(amt)) System.out.println(getClass().getSimpleName() + &quot; approved &quot; + item + &quot; ₹&quot; + amt);
+        else if (next != null) next.approve(item, amt);       // pass along
+        else System.out.println(&quot;Nobody can approve &quot; + item + &quot; ₹&quot; + amt);
+    }
+    protected abstract boolean canApprove(double amt);
+}
+class TeamLead extends Approver { protected boolean canApprove(double a) { return a &lt;= 10_000; } }
+class Manager  extends Approver { protected boolean canApprove(double a) { return a &lt;= 50_000; } }
+class Director extends Approver { protected boolean canApprove(double a) { return a &lt;= 2_00_000; } }
+
+public class ChainDemo {
+    public static void main(String[] args) {
+        Approver chain = new TeamLead();
+        chain.setNext(new Manager()).setNext(new Director());
+        chain.approve(&quot;Mouse&quot;, 1500);
+        chain.approve(&quot;Laptop&quot;, 45000);
+        chain.approve(&quot;Server&quot;, 150000);
+        chain.approve(&quot;Building&quot;, 9_00_00_000);
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">TeamLead approved Mouse ₹1500.0
+Manager approved Laptop ₹45000.0
+Director approved Server ₹150000.0
+Nobody can approve Building ₹9.0E7</code></pre>
+<h3 id="dpsummary">Pattern summary</h3>
+<table>
+<tr><th>Pattern</th><th>Type</th><th>One-line idea</th><th>JDK / real example</th></tr>
+<tr><td>Singleton</td><td>C</td><td>Exactly one instance + global access</td><td>Runtime.getRuntime()</td></tr>
+<tr><td>Factory</td><td>C</td><td>Let a method decide which class to create</td><td>Calendar.getInstance()</td></tr>
+<tr><td>Prototype</td><td>C</td><td>Create by cloning a template object</td><td>Object.clone()</td></tr>
+<tr><td>Adapter</td><td>S</td><td>Convert one interface to another</td><td>InputStreamReader, Arrays.asList</td></tr>
+<tr><td>Decorator</td><td>S</td><td>Wrap to add behaviour at runtime</td><td>BufferedReader</td></tr>
+<tr><td>Facade</td><td>S</td><td>Simple front for a complex subsystem</td><td>Order service, SLF4J</td></tr>
+<tr><td>Composite</td><td>S</td><td>Tree where leaf and group are treated the same</td><td>JavaFX Parent/Node, File/Folder</td></tr>
+<tr><td>Proxy</td><td>S</td><td>Stand-in that controls access</td><td>RMI stubs, Hibernate lazy loading</td></tr>
+<tr><td>Flyweight</td><td>S</td><td>Share common immutable state</td><td>Integer.valueOf, String pool</td></tr>
+<tr><td>Iterator</td><td>B</td><td>Traverse without exposing internals</td><td>java.util.Iterator</td></tr>
+<tr><td>Strategy</td><td>B</td><td>Swappable algorithm objects</td><td>Comparator</td></tr>
+<tr><td>Template</td><td>B</td><td>Fixed skeleton, overridable steps</td><td>AbstractList, HttpServlet</td></tr>
+<tr><td>Observer</td><td>B</td><td>Notify subscribers on change</td><td>Event listeners</td></tr>
+<tr><td>State</td><td>B</td><td>Behaviour changes with state objects</td><td>Order lifecycle, vending machine</td></tr>
+<tr><td>Chain of Resp.</td><td>B</td><td>Pass the request along handlers</td><td>Servlet filters, logging</td></tr>
+</table>
+</main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>

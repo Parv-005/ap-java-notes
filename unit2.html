@@ -1,0 +1,500 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit 2 · Polymorphism & Objects</title><link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head><body><div class="layout"><nav class="toc"><a class="home" href="index.html">☕ AP Java Notes</a>
+<div class="units"><a href="index.html">Home</a><a href="unit0.html">Java Basics</a><a href="unit1.html">Unit 1</a><a href="unit2.html">Unit 2</a><a href="unit3.html">Unit 3</a><a href="unit4.html">Unit 4</a><a href="unit5.html">Unit 5</a><a href="practicals.html">Practicals</a><a href="pyq.html">PYQ Bank</a><a href="revision.html">Quick Revision</a></div><hr style="border:0;border-top:1px solid var(--border)"><div class="auto"></div></nav>
+<main><h1>Unit 2: Polymorphism, Abstraction and Comparing Objects</h1>
+<p class="sub">Polymorphism via inheritance · method resolution · interfaces vs inheritance · constructor chaining · abstract classes · immutable classes · Object class · equals / Comparable / Comparator</p>
+
+<h2 id="poly">Polymorphism using Inheritance <span class="tag p">PYQ ES24-1a</span><span class="tag p">PYQ MS24-4a</span><span class="tag p">PYQ MS25-5b</span><span class="tag p">PYQ EJ26-2a</span><span class="tag p">PYQ MS26-4a</span><span class="tag l">Lab 5</span></h2>
+<p><b>Polymorphism</b> (Greek for "many forms") is the ability of one name (a method or reference) to behave differently depending on context. Java has two kinds:</p>
+<table>
+<tr><th></th><th>Compile-time (static) polymorphism</th><th>Runtime (dynamic) polymorphism</th></tr>
+<tr><td>Achieved by</td><td><b>Method overloading</b> (and constructor overloading)</td><td><b>Method overriding</b> + upcasting</td></tr>
+<tr><td>Resolved by</td><td>Compiler, using the <b>reference type</b> and argument types</td><td>JVM at runtime, using the <b>actual object type</b></td></tr>
+<tr><td>Binding</td><td>Early / static binding</td><td>Late / dynamic binding (dynamic method dispatch)</td></tr>
+<tr><td>Inheritance needed?</td><td>No</td><td>Yes (or an interface)</td></tr>
+<tr><td>Speed</td><td>Slightly faster</td><td>Virtual-call lookup (optimised by the JIT)</td></tr>
+<tr><td>Applies to</td><td>static, private, final methods are always static-bound</td><td>Instance, non-final, non-private methods</td></tr>
+</table>
+<p><b>Why polymorphism matters (MS24-4a):</b> you write general code (<code>for (Shape s : shapes) s.area()</code>) that works with types that don't exist yet. It removes long <code>if/else instanceof</code> chains, makes the code extensible (Open/Closed Principle) and loosely coupled, and it is the basis of most design patterns (Strategy, State, Template, Observer).</p>
+
+<div class="box lab"><b>Lab 5: Shape → Circle, Square, Triangle, showing overriding AND overloading</b></div>
+<pre><code class="language-java">abstract class Shape {
+    abstract double area();                                  // to be overridden
+    void describe() { System.out.printf(&quot;%s with area %.2f%n&quot;, getClass().getSimpleName(), area()); }
+}
+class Circle extends Shape {
+    double r; Circle(double r){ this.r = r; }
+    @Override double area() { return Math.PI * r * r; }      // OVERRIDING
+}
+class Square extends Shape {
+    double s; Square(double s){ this.s = s; }
+    @Override double area() { return s * s; }
+}
+class Triangle extends Shape {
+    double b, h; Triangle(double b, double h){ this.b = b; this.h = h; }
+    @Override double area() { return 0.5 * b * h; }
+}
+
+class AreaCalculator {                                       // OVERLOADING: same name, different params
+    static double area(double r)              { return Math.PI * r * r; }      // circle
+    static double area(int side)              { return side * side; }          // square
+    static double area(double b, double h)    { return 0.5 * b * h; }          // triangle
+    static double area(double a, double b, double c) {                         // triangle by Heron
+        double s = (a + b + c) / 2;
+        return Math.sqrt(s * (s - a) * (s - b) * (s - c));
+    }
+}
+
+public class PolyDemo {
+    public static void main(String[] args) {
+        // Runtime polymorphism: reference type Shape, object types vary
+        Shape[] shapes = { new Circle(1), new Square(2), new Triangle(3, 4) };
+        for (Shape s : shapes) s.describe();          // JVM picks the area() of each actual class
+
+        // Compile-time polymorphism: compiler picks the overload by argument list
+        System.out.println(AreaCalculator.area(1.0));         // double → circle
+        System.out.println(AreaCalculator.area(2));           // int → square
+        System.out.println(AreaCalculator.area(3.0, 4.0));    // two doubles → triangle
+        System.out.println(AreaCalculator.area(3, 4, 5));     // three → Heron = 6.0
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Circle with area 3.14
+Square with area 4.00
+Triangle with area 6.00
+3.141592653589793
+4.0
+6.0
+6.0</code></pre>
+<h3 id="overvs">Overloading vs overriding <span class="tag p">PYQ MS24-4b</span></h3>
+<table>
+<tr><th>Method Overloading</th><th>Method Overriding</th></tr>
+<tr><td>Same name, <b>different parameter list</b> (number, type or order)</td><td>Same name, <b>same parameters</b> (same signature)</td></tr>
+<tr><td>Usually in the same class (can be inherited too)</td><td>In a subclass (needs IS-A)</td></tr>
+<tr><td>Return type can be anything (changing only the return type is NOT overloading)</td><td>Same return type or a <b>covariant</b> subtype</td></tr>
+<tr><td>Any access modifier</td><td>Can't reduce visibility</td></tr>
+<tr><td>Can throw any exceptions</td><td>Can't throw new or broader <i>checked</i> exceptions</td></tr>
+<tr><td>static, private and final methods can be overloaded</td><td>static, private and final methods <b>can't</b> be overridden (static ones get <i>hidden</i>)</td></tr>
+<tr><td>Compile-time polymorphism</td><td>Runtime polymorphism</td></tr>
+<tr><td><code>@Override</code> not used</td><td><code>@Override</code> recommended (the compiler checks it)</td></tr>
+</table>
+<p><b>Overloading with different numbers or types of parameters (MS26-4a):</b></p>
+<pre><code class="language-java">class Printer {
+    void print(int x)            { System.out.println(&quot;int: &quot; + x); }
+    void print(double x)         { System.out.println(&quot;double: &quot; + x); }
+    void print(String s)         { System.out.println(&quot;String: &quot; + s); }
+    void print(String s, int n)  { System.out.println((s + &quot; &quot;).repeat(n)); }
+    void print(int n, String s)  { System.out.println(n + &quot;:&quot; + s); }   // order differs
+    void print(int... xs)        { System.out.println(&quot;varargs: &quot; + xs.length); }
+}
+// p.print(5) → int; p.print(5L) → widened to double; p.print(&#x27;a&#x27;) → char widened to int: 97
+// p.print() → varargs: 0</code></pre><p><b>Overload resolution order</b> (the compiler tries each phase in turn): ① exact match or widening of primitives → ② boxing/unboxing → ③ varargs. If two methods match equally well, the call is <i>ambiguous</i> and won't compile.</p>
+
+<h2 id="resolution">Method Resolution <span class="tag p">PYQ ES24-2c</span><span class="tag p">PYQ EJ26-2a</span><span class="tag p">PYQ MJ26-4a</span><span class="tag p">PYQ MS26-3a</span></h2>
+<p><b>Method resolution</b> is how Java decides <i>which</i> method body runs for a call like <code>ref.m(args)</code>. It happens in <b>two phases</b>:</p>
+<h4>Phase 1: Compile time (choosing the signature)</h4>
+<ol><li>The compiler looks at the <b>declared (static) type of the reference</b>.</li>
+<li>It finds all accessible methods named <code>m</code> in that type and its supertypes.</li>
+<li>It picks the <b>most specific</b> overload for the argument types (overload resolution).</li>
+<li>If the reference type has no matching method, the result is a compile error, <i>even if the real object has it</i>.</li>
+<li>It writes the chosen signature into the bytecode (for example <code>invokevirtual Animal.sound()V</code>).</li></ol>
+<h4>Phase 2: Runtime (choosing the implementation): dynamic method dispatch</h4>
+<ol><li>The JVM looks at the <b>actual class of the object</b> the reference points to.</li>
+<li>It searches <b>that class</b> for a method with the chosen signature. If it is there, that body runs.</li>
+<li>Otherwise it walks <b>up the inheritance chain</b> (parent, grandparent, … <code>Object</code>) and runs the first match it finds.</li>
+<li>In practice the JVM uses a per-class <b>virtual method table (vtable)</b>, so the lookup is a fast index operation.</li></ol>
+<p><b>Exceptions to dynamic dispatch:</b> <code>static</code>, <code>private</code>, <code>final</code> methods and constructors are bound at compile time (<code>invokestatic</code> / <code>invokespecial</code>). <b>Fields are never polymorphic</b>: field access always uses the reference type.</p>
+<pre><code class="language-java">class Person {
+    String role = &quot;person&quot;;
+    void work()           { System.out.println(&quot;Person works&quot;); }
+    void intro()          { System.out.println(&quot;I am a person&quot;); work(); }   // calls the overridden work()!
+    static void species() { System.out.println(&quot;Homo sapiens (Person)&quot;); }
+}
+class Employee extends Person {
+    String role = &quot;employee&quot;;
+    @Override void work() { System.out.println(&quot;Employee writes code&quot;); }
+    static void species() { System.out.println(&quot;Homo sapiens (Employee)&quot;); } // HIDING, not overriding
+}
+class Manager extends Employee {
+    @Override void work() {
+        super.work();                              // explicitly call the parent version
+        System.out.println(&quot;Manager reviews code&quot;);
+    }
+    void approve() { System.out.println(&quot;approved&quot;); }
+}
+public class Resolution {
+    public static void main(String[] args) {
+        Person p = new Manager();       // reference type Person, object type Manager
+        p.work();                       // runtime: Manager.work → super → Employee.work
+        p.intro();                      // intro() inherited from Person, but work() → Manager&#x27;s
+        p.species();                    // static → reference type → Person&#x27;s version
+        System.out.println(p.role);     // field → reference type → &quot;person&quot;
+        // p.approve();                 // compile error: Person has no approve()
+        ((Manager) p).approve();        // downcast first
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Employee writes code
+Manager reviews code
+I am a person
+Employee writes code
+Manager reviews code
+Homo sapiens (Person)
+person
+approved</code></pre><p><b>The role of <code>super</code>:</b> <code>super.work()</code> is <i>not</i> dynamically dispatched. It always calls the direct parent's version (<code>invokespecial</code>). That's how a subclass extends behaviour instead of replacing it.</p>
+
+<h2 id="ivsi">Interfaces vs Inheritance (and vs Abstract Classes) <span class="tag p">PYQ MJ26-3a</span><span class="tag p">PYQ EJ26-1c</span></h2>
+<table>
+<tr><th></th><th>Class inheritance (<code>extends</code>)</th><th>Interface (<code>implements</code>)</th></tr>
+<tr><td>Relationship</td><td>IS-A, with shared implementation</td><td>CAN-DO / capability (contract)</td></tr>
+<tr><td>Number</td><td>Only one superclass</td><td>Many interfaces</td></tr>
+<tr><td>State</td><td>Inherits fields (state)</td><td>No instance state, only constants</td></tr>
+<tr><td>Code reuse</td><td>Yes, inherits method bodies</td><td>Limited (default methods)</td></tr>
+<tr><td>Coupling</td><td>Tight (changes in the parent ripple down)</td><td>Loose</td></tr>
+<tr><td>Constructors</td><td>Yes (chained)</td><td>None</td></tr>
+</table>
+<p><b>Prefer an interface when:</b> unrelated classes share a capability (<code>Comparable</code>, <code>Payable</code>). You need multiple inheritance of type. You want to define an API that different teams or vendors implement. You want to swap implementations or mock them in tests.<br>
+<b>Prefer inheritance (abstract class) when:</b> classes are closely related and share <i>state and code</i>, you need constructors or non-public members, or you want a Template Method skeleton.</p>
+
+<h3 id="absvsif">Abstract class vs interface <span class="tag p">PYQ EJ26-1c</span></h3>
+<table>
+<tr><th>Abstract class</th><th>Interface</th></tr>
+<tr><td><code>abstract class</code>, keyword <code>extends</code></td><td><code>interface</code>, keyword <code>implements</code></td></tr>
+<tr><td>0–100% abstraction</td><td>100% abstraction (before Java 8). Now abstract + default/static/private</td></tr>
+<tr><td>Instance variables of any kind</td><td>Only <code>public static final</code> constants</td></tr>
+<tr><td>Has constructors</td><td>No constructors</td></tr>
+<tr><td>Members can be private/protected/public</td><td>Members are public (private helpers since Java 9)</td></tr>
+<tr><td>Single inheritance</td><td>Multiple implementation</td></tr>
+<tr><td>Can have <code>final</code>, <code>static</code>, non-abstract methods</td><td>Abstract methods can't be final</td></tr>
+<tr><td>Use for: a family of related classes</td><td>Use for: a capability across unrelated classes</td></tr>
+</table>
+<p><b>A design that needs both (EJ26-1c):</b> a payroll system. All employees share <i>state</i> (id, name, base salary) and a salary-calculation skeleton, so that belongs in an <b>abstract class</b>. But only some employees are <code>Taxable</code>, and both employees and vendors are <code>Payable</code>. Those capabilities cut across the hierarchy, so they belong in <b>interfaces</b>. One mechanism alone isn't enough. With only an abstract class, Vendor (not an employee) couldn't be paid by the same code, and Java can't extend two classes. With only interfaces, each employee type would repeat the shared fields and constructor logic.</p>
+<pre><code class="language-java">interface Payable  { double amountDue(); }
+interface Taxable  { default double tax() { return 0.1 * taxableIncome(); } double taxableIncome(); }
+
+abstract class Employee implements Payable {                  // shared state + skeleton
+    protected final int id; protected final String name; protected final double base;
+    Employee(int id, String name, double base) { this.id = id; this.name = name; this.base = base; }
+    protected abstract double bonus();                        // varies
+    public final double amountDue() { return base + bonus(); }// fixed algorithm (template)
+}
+class Engineer extends Employee implements Taxable {
+    Engineer(int id, String n, double b) { super(id, n, b); }
+    protected double bonus() { return 0.2 * base; }
+    public double taxableIncome() { return amountDue(); }
+}
+class Intern extends Employee {                                // not taxable
+    Intern(int id, String n) { super(id, n, 15000); }
+    protected double bonus() { return 0; }
+}
+class Vendor implements Payable, Taxable {                    // NOT an Employee
+    double invoice; Vendor(double inv) { invoice = inv; }
+    public double amountDue() { return invoice; }
+    public double taxableIncome() { return invoice; }
+}
+public class Payroll {
+    public static void main(String[] args) {
+        List&lt;Payable&gt; toPay = List.of(new Engineer(1, &quot;Riya&quot;, 80000), new Intern(2, &quot;Sam&quot;), new Vendor(50000));
+        for (Payable p : toPay) {
+            System.out.printf(&quot;%-8s pay=%.0f&quot;, p.getClass().getSimpleName(), p.amountDue());
+            if (p instanceof Taxable t) System.out.printf(&quot;  tax=%.0f&quot;, t.tax());
+            System.out.println();
+        }
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">Engineer pay=96000  tax=9600
+Intern   pay=15000
+Vendor   pay=50000  tax=5000</code></pre>
+<h2 id="ctorchain">Constructor Invocation in the Inheritance Tree <span class="tag p">PYQ MJ26-4a</span></h2>
+<p>When you create a subclass object, <b>constructors run from the top of the hierarchy down</b>: <code>Object</code> → grandparent → parent → child. The parent part of an object must be fully set up before the child part uses it.</p>
+<ul><li>The first statement of every constructor is either <code>this(...)</code> or <code>super(...)</code>. If you write neither, the compiler inserts <b><code>super()</code></b> (no-arg).</li>
+<li>So if the parent has <b>no no-arg constructor</b>, the child <b>must</b> call <code>super(args)</code> explicitly, or it won't compile.</li>
+<li>Full order for <code>new C()</code>: static initialisers (on first class load, parent first) → for each level from the top down: instance field initialisers and instance blocks, then the constructor body.</li></ul>
+<pre><code class="language-java">class Person {
+    static { System.out.println(&quot;1. Person static block (class load)&quot;); }
+    { System.out.println(&quot;3. Person instance block&quot;); }
+    Person() { System.out.println(&quot;4. Person constructor&quot;); }
+    void role() { System.out.println(&quot;Person&quot;); }
+}
+class Employee extends Person {
+    static { System.out.println(&quot;2. Employee static block&quot;); }
+    Employee() { super(); System.out.println(&quot;5. Employee constructor&quot;); }   // super() implicit anyway
+    @Override void role() { System.out.println(&quot;Employee&quot;); }
+}
+class Manager extends Employee {
+    String dept;
+    Manager(String dept) {                   // implicit super() → Employee()
+        this.dept = dept;
+        System.out.println(&quot;6. Manager constructor (&quot; + dept + &quot;)&quot;);
+    }
+    @Override void role() { System.out.println(&quot;Manager of &quot; + dept); }
+}
+public class ChainDemo {
+    public static void main(String[] args) {
+        Manager m = new Manager(&quot;Sales&quot;);
+        m.role();                            // method resolution: most-derived → Manager.role
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">1. Person static block (class load)
+2. Employee static block
+3. Person instance block
+4. Person constructor
+5. Employee constructor
+6. Manager constructor (Sales)
+Manager of Sales</code></pre><div class="box warn"><b>Pitfall: don't call overridable methods from a constructor</b>If <code>Person()</code> called <code>role()</code>, it would dispatch to <code>Manager.role()</code> <i>before</i> <code>dept</code> was assigned, and print "Manager of null".</div>
+
+<h2 id="abstract">Abstract Classes <span class="tag p">PYQ MS24-5b</span><span class="tag p">PYQ ES25-1a(i)</span><span class="tag l">Lab 7</span></h2>
+<p>An <b>abstract class</b> is a class declared with <code>abstract</code> that <b>can't be instantiated</b>. It represents a general concept (Shape, Animal, Employee) that is only partly defined. It may contain <b>abstract methods</b> (declared without a body, ending in <code>;</code>), which every concrete subclass <b>must</b> override, as well as normal methods, fields and constructors.</p>
+<pre><code class="language-java">// Syntax
+access abstract class ClassName {
+    // fields, constructors, concrete methods
+    access abstract returnType methodName(params);   // no body
+}</code></pre><ul><li>If a class has even one abstract method, the class must be abstract.</li>
+<li>An abstract class may have <b>zero</b> abstract methods (only to prevent instantiation).</li>
+<li>It can have constructors. They run when a subclass is created, via <code>super()</code>.</li>
+<li>A subclass that doesn't implement every abstract method must itself be abstract.</li>
+<li>A reference of the abstract type is allowed: <code>Shape s = new Circle();</code></li></ul>
+<p><b>Can an abstract method be <code>private</code>? No.</b> An abstract method <i>has to be overridden</i> by a subclass, but private methods aren't visible to subclasses, so they can never be overridden. <code>private abstract</code> is a contradiction and a compile error ("illegal combination of modifiers"). For the same reason, abstract methods can't be <code>final</code> (can't be overridden) or <code>static</code> (static methods aren't dispatched by object). They <i>can</i> be <code>public</code>, <code>protected</code> or default.</p>
+<div class="box lab"><b>Lab 7: Abstraction with abstract class + interface as a contract</b></div>
+<pre><code class="language-java">interface Operation {                         // contract: what every operation must offer
+    double apply(double a, double b);
+    String symbol();
+}
+abstract class BaseOperation implements Operation {   // partial implementation
+    private static int count = 0;
+    protected BaseOperation() { count++; }
+    public void show(double a, double b) {    // concrete, shared
+        System.out.println(a + &quot; &quot; + symbol() + &quot; &quot; + b + &quot; = &quot; + apply(a, b));
+    }
+    static int count() { return count; }
+}
+class Add extends BaseOperation { public double apply(double a,double b){return a+b;} public String symbol(){return &quot;+&quot;;} }
+class Mul extends BaseOperation { public double apply(double a,double b){return a*b;} public String symbol(){return &quot;×&quot;;} }
+class Pow extends BaseOperation { public double apply(double a,double b){return Math.pow(a,b);} public String symbol(){return &quot;^&quot;;} }
+
+public class AbstractionDemo {
+    public static void main(String[] args) {
+        // BaseOperation op = new BaseOperation();   // ERROR: abstract, cannot instantiate
+        BaseOperation[] ops = { new Add(), new Mul(), new Pow() };
+        for (BaseOperation op : ops) op.show(2, 5);
+        System.out.println(&quot;Operations created: &quot; + BaseOperation.count());
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">2.0 + 5.0 = 7.0
+2.0 × 5.0 = 10.0
+2.0 ^ 5.0 = 32.0
+Operations created: 3</code></pre>
+<h2 id="immutable">Immutable Classes <span class="tag p">PYQ MS24-5a</span><span class="tag p">PYQ MJ26-4b</span><span class="tag p">PYQ MS26-5a</span></h2>
+<p>An <b>immutable</b> object's state <b>can't change after it is constructed</b>. Every "modifying" operation returns a <i>new</i> object. Examples: <code>String</code>, wrapper classes (<code>Integer</code>, <code>Double</code>), <code>LocalDate</code>, <code>BigDecimal</code>, <code>List.of(...)</code>.</p>
+<h4>Rules for creating an immutable class</h4>
+<ol><li>Declare the class <b><code>final</code></b>, so subclasses can't add mutable behaviour or override methods.</li>
+<li>Make all fields <b><code>private final</code></b>.</li>
+<li>Provide <b>no setters</b> and no methods that change state.</li>
+<li>Initialise all fields in the constructor.</li>
+<li><b>Defensive copy on input:</b> if a constructor argument is mutable (Date, array, List), store a <i>copy</i>, not the caller's reference.</li>
+<li><b>Defensive copy on output:</b> getters return a copy or an unmodifiable view of mutable fields.</li>
+<li>"Modifier" methods (withers) return a new instance.</li></ol>
+<pre><code class="language-java">import java.util.*;
+
+public final class ImmutableStudent {                       // rule 1
+    private final int roll;                                 // rule 2
+    private final String name;                              // String is already immutable
+    private final Date dob;                                 // mutable type!
+    private final List&lt;Integer&gt; marks;                      // mutable type!
+
+    public ImmutableStudent(int roll, String name, Date dob, List&lt;Integer&gt; marks) {
+        this.roll  = roll;
+        this.name  = Objects.requireNonNull(name);
+        this.dob   = new Date(dob.getTime());               // rule 5: deep/defensive copy IN
+        this.marks = List.copyOf(marks);                    // unmodifiable copy
+    }
+    public int getRoll()          { return roll; }
+    public String getName()       { return name; }
+    public Date getDob()          { return new Date(dob.getTime()); }   // rule 6: copy OUT
+    public List&lt;Integer&gt; getMarks(){ return marks; }                     // already unmodifiable
+
+    public ImmutableStudent withName(String newName) {       // rule 7
+        return new ImmutableStudent(roll, newName, dob, marks);
+    }
+    @Override public String toString() { return roll + &quot; &quot; + name + &quot; &quot; + dob + &quot; &quot; + marks; }
+
+    public static void main(String[] args) {
+        Date d = new Date(100, 0, 1);
+        List&lt;Integer&gt; m = new ArrayList&lt;&gt;(List.of(90, 85));
+        ImmutableStudent s = new ImmutableStudent(1, &quot;Asha&quot;, d, m);
+
+        d.setYear(50); m.add(0);               // try to mutate through the original references
+        s.getDob().setYear(10);                // try to mutate through the getter
+        try { s.getMarks().add(1); } catch (UnsupportedOperationException e) { System.out.println(&quot;marks are read-only&quot;); }
+
+        System.out.println(s);                 // unchanged: year 2000, [90, 85]
+        ImmutableStudent s2 = s.withName(&quot;Asha K&quot;);
+        System.out.println(s == s2);           // false - a new object
+    }
+}</code></pre><p><b>Without defensive copying</b> (<code>this.dob = dob;</code>), the caller's later <code>d.setYear(50)</code> would change the "immutable" student. This is exactly what MS26-5a asks about. <b>Shallow vs deep copy</b> matters here: for a list of mutable objects, you must copy the elements too. See <a href="unit3.html#clone">cloning</a>.</p>
+<p><b>Java 16+ <code>record</code></b> gives you final private fields, a constructor, accessors, equals/hashCode/toString automatically: <code>public record Point(int x, int y) {}</code>. You still have to copy mutable components yourself in a compact constructor.</p>
+<p><b>Advantages:</b> automatically <b>thread-safe</b> (no synchronisation needed); safe to share and cache (the String pool); safe as <code>HashMap</code> keys, since the hashCode never changes; simpler to reason about; protects against unwanted changes (security). <b>Disadvantage:</b> a new object for every change, which can mean extra garbage. <code>StringBuilder</code> is the mutable companion of <code>String</code>.</p>
+
+<h2 id="object">The Object Class <span class="tag p">PYQ MS26-1b</span></h2>
+<p><code>java.lang.Object</code> is the <b>root of the class hierarchy</b>. Every class extends it directly or indirectly, even if you don't write <code>extends</code>. So an <code>Object</code> reference can hold anything (arrays too), and every object has these methods:</p>
+<table>
+<tr><th>Method</th><th>Purpose / default behaviour</th></tr>
+<tr><td><code>String toString()</code></td><td>Text form. Default: <code>ClassName@hexHashCode</code>. Override for readable output. Called automatically by <code>println</code> and string concatenation.</td></tr>
+<tr><td><code>boolean equals(Object o)</code></td><td>Logical equality. Default: same as <code>==</code> (reference identity).</td></tr>
+<tr><td><code>int hashCode()</code></td><td>Integer hash used by HashMap and HashSet. Must be consistent with equals.</td></tr>
+<tr><td><code>Class&lt;?&gt; getClass()</code></td><td>Runtime class object (reflection). <code>final</code>, so it can't be overridden.</td></tr>
+<tr><td><code>Object clone()</code></td><td><code>protected</code>. Field-by-field (shallow) copy. Needs <code>Cloneable</code>.</td></tr>
+<tr><td><code>void finalize()</code></td><td>Called before GC. Deprecated.</td></tr>
+<tr><td><code>wait()</code>, <code>notify()</code>, <code>notifyAll()</code></td><td>Thread coordination on the object's monitor. See <a href="unit5.html#waitnotify">Unit 5</a>.</td></tr>
+</table>
+<pre><code class="language-java">import java.util.Objects;
+
+public class Point implements Cloneable {
+    private final int x, y;
+    public Point(int x, int y) { this.x = x; this.y = y; }
+
+    @Override public String toString() { return &quot;Point(&quot; + x + &quot;, &quot; + y + &quot;)&quot;; }
+
+    @Override public boolean equals(Object o) {
+        if (this == o) return true;                       // same reference
+        if (!(o instanceof Point)) return false;          // null-safe type check
+        Point p = (Point) o;
+        return x == p.x &amp;&amp; y == p.y;                      // compare significant fields
+    }
+    @Override public int hashCode() { return Objects.hash(x, y); }
+
+    @Override public Point clone() {
+        try { return (Point) super.clone(); }
+        catch (CloneNotSupportedException e) { throw new AssertionError(); }
+    }
+
+    public static void main(String[] args) {
+        Point a = new Point(1, 2), b = new Point(1, 2);
+        System.out.println(a);                         // Point(1, 2)  (toString)
+        System.out.println(a == b);                    // false        (different objects)
+        System.out.println(a.equals(b));               // true         (same content)
+        System.out.println(a.hashCode() == b.hashCode()); // true      (contract)
+        System.out.println(a.getClass().getName());    // Point
+        Point c = a.clone();
+        System.out.println(c.equals(a) + &quot; &quot; + (c != a)); // true true
+    }
+}</code></pre>
+<h2 id="equals">Comparing Objects: <code>==</code> vs <code>equals()</code> <span class="tag p">PYQ MS26-3b</span></h2>
+<table><tr><th><code>==</code> operator</th><th><code>equals()</code> method</th></tr>
+<tr><td>For primitives: compares <b>values</b>. For objects: compares <b>references</b> (same memory location?)</td><td>Compares <b>contents</b> / logical equality, if overridden</td></tr>
+<tr><td>An operator, can't be overridden</td><td>A method of Object, can be overridden</td></tr>
+<tr><td>Works with null on either side</td><td><code>null.equals(x)</code> throws NullPointerException</td></tr></table>
+<pre><code class="language-java">public class StringCompare {
+    public static void main(String[] args) {
+        String s1 = &quot;Java&quot;;                 // string literal → String Constant Pool
+        String s2 = &quot;Java&quot;;                 // reuses the same pooled object
+        String s3 = new String(&quot;Java&quot;);     // new object on the heap
+        String s4 = s3.intern();            // pooled version
+
+        System.out.println(s1 == s2);       // true  - same pooled reference
+        System.out.println(s1 == s3);       // false - different objects
+        System.out.println(s1.equals(s3));  // true  - same characters
+        System.out.println(s1 == s4);       // true  - intern() returns the pooled one
+        System.out.println(&quot;JAVA&quot;.equalsIgnoreCase(s1)); // true
+    }
+}</code></pre><p><b>Explanation:</b> literals are stored once in the <b>String pool</b>, so <code>s1</code> and <code>s2</code> share a reference. <code>new String</code> always makes a new heap object, so <code>==</code> is false while <code>equals</code> (overridden in String to compare characters) is true. <b>Always compare strings with <code>equals()</code>.</b></p>
+<h3 id="eqcontract">The equals() and hashCode() contract</h3>
+<ul><li><b>Reflexive:</b> <code>x.equals(x)</code> is true. <b>Symmetric:</b> <code>x.equals(y) ⇔ y.equals(x)</code>. <b>Transitive</b>. <b>Consistent</b> (same result on repeated calls). <code>x.equals(null)</code> is false.</li>
+<li><b>If <code>a.equals(b)</code>, then <code>a.hashCode() == b.hashCode()</code> must hold.</b> The reverse isn't required (collisions are allowed).</li>
+<li>If you override equals but not hashCode, a <code>HashSet</code> will keep "duplicates" and <code>HashMap.get()</code> fails.</li></ul>
+
+<h2 id="comparable">Comparable Interface <span class="tag p">PYQ ES24-1b</span><span class="tag p">PYQ EJ26-2c</span><span class="tag p">PYQ MS26-5b</span></h2>
+<p><code>java.lang.Comparable&lt;T&gt;</code> defines the <b>natural ordering</b> of a class. The class itself implements one method:</p>
+<pre><code class="language-java">public interface Comparable&lt;T&gt; { int compareTo(T other); }</code></pre><p><b>Working of <code>compareTo</code>:</b> it returns a <b>negative</b> number if <code>this</code> &lt; other, <b>zero</b> if they are equal, and <b>positive</b> if <code>this</code> &gt; other. <code>Collections.sort(list)</code>, <code>Arrays.sort</code>, <code>TreeSet</code> and <code>TreeMap</code> call it to order elements. It should be consistent with <code>equals</code>.</p>
+<pre><code class="language-java">import java.util.*;
+
+class Student implements Comparable&lt;Student&gt; {
+    int roll; String name; double marks;
+    Student(int r, String n, double m) { roll = r; name = n; marks = m; }
+
+    @Override
+    public int compareTo(Student o) {
+        return Double.compare(this.marks, o.marks);   // ascending by marks
+        // avoid &quot;return (int)(this.marks - o.marks)&quot; - truncation/overflow bugs
+    }
+    @Override public String toString() { return name + &quot;(&quot; + marks + &quot;)&quot;; }
+}
+public class ComparableDemo {
+    public static void main(String[] args) {
+        List&lt;Student&gt; list = new ArrayList&lt;&gt;(List.of(
+            new Student(3, &quot;Ravi&quot;, 72.5), new Student(1, &quot;Asha&quot;, 91),
+            new Student(2, &quot;Kiran&quot;, 85), new Student(4, &quot;Meena&quot;, 72.5)));
+        Collections.sort(list);                       // uses compareTo
+        System.out.println(&quot;By marks ↑ : &quot; + list);
+        list.sort(Collections.reverseOrder());        // reverse natural order
+        System.out.println(&quot;By marks ↓ : &quot; + list);
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">By marks ↑ : [Ravi(72.5), Meena(72.5), Kiran(85.0), Asha(91.0)]
+By marks ↓ : [Asha(91.0), Kiran(85.0), Ravi(72.5), Meena(72.5)]</code></pre><p><b>Output explained:</b> <code>Collections.sort</code> repeatedly calls <code>a.compareTo(b)</code>. Ravi and Meena compare as 0 (equal). The sort is <b>stable</b>, so they keep their original relative order.</p>
+
+<h2 id="comparator">Comparator Interface <span class="tag p">PYQ ES24-1b</span><span class="tag p">PYQ EJ26-2c</span></h2>
+<p><code>java.util.Comparator&lt;T&gt;</code> defines an <b>external, custom ordering</b> in a separate object. You can have <b>many</b> comparators for one class, and you can sort classes you can't modify.</p>
+<pre><code class="language-java">public interface Comparator&lt;T&gt; { int compare(T a, T b); /* + many default helpers */ }</code></pre><pre><code class="language-java">import java.util.*;
+
+class Student {
+    int roll; String name; String dept; double marks;
+    Student(int r, String n, String d, double m) { roll = r; name = n; dept = d; marks = m; }
+    public String getName() { return name; }  public String getDept() { return dept; }
+    public double getMarks() { return marks; } public int getRoll() { return roll; }
+    @Override public String toString() { return String.format(&quot;%-6s %-3s %5.1f #%d&quot;, name, dept, marks, roll); }
+}
+
+// 1. Classic: separate class
+class NameComparator implements Comparator&lt;Student&gt; {
+    public int compare(Student a, Student b) { return a.name.compareTo(b.name); }
+}
+
+public class ComparatorDemo {
+    public static void main(String[] args) {
+        List&lt;Student&gt; list = new ArrayList&lt;&gt;(List.of(
+            new Student(3, &quot;Ravi&quot;, &quot;CSE&quot;, 72.5), new Student(1, &quot;Asha&quot;, &quot;IT&quot;, 91),
+            new Student(2, &quot;Kiran&quot;, &quot;IT&quot;, 85),   new Student(4, &quot;Meena&quot;, &quot;CSE&quot;, 72.5),
+            new Student(5, &quot;Arjun&quot;, &quot;IT&quot;, 85)));
+
+        list.sort(new NameComparator());
+        System.out.println(&quot;By name:\n&quot; + String.join(&quot;\n&quot;, list.stream().map(Object::toString).toList()));
+
+        // 2. Anonymous class
+        list.sort(new Comparator&lt;Student&gt;() {
+            public int compare(Student a, Student b) { return Integer.compare(a.roll, b.roll); }
+        });
+
+        // 3. Lambda
+        list.sort((a, b) -&gt; Double.compare(b.marks, a.marks));   // marks descending
+
+        // 4. MULTIPLE ATTRIBUTES: dept ↑, then marks ↓, then name ↑   (EJ26-2c)
+        Comparator&lt;Student&gt; multi = Comparator.comparing(Student::getDept)
+                .thenComparing(Student::getMarks, Comparator.reverseOrder())
+                .thenComparing(Student::getName);
+        list.sort(multi);
+        System.out.println(&quot;\nBy dept ↑, marks ↓, name ↑:&quot;);
+        list.forEach(System.out::println);
+    }
+}</code></pre><div class="sub" style="font-size:12px;margin-bottom:-6px">Output</div><pre><code class="out nohighlight">By name:
+Arjun  IT   85.0 #5
+Asha   IT   91.0 #1
+Kiran  IT   85.0 #2
+Meena  CSE  72.5 #4
+Ravi   CSE  72.5 #3
+
+By dept ↑, marks ↓, name ↑:
+Meena  CSE  72.5 #4
+Ravi   CSE  72.5 #3
+Asha   IT   91.0 #1
+Arjun  IT   85.0 #5
+Kiran  IT   85.0 #2</code></pre>
+<h3 id="cmpvs">Comparable vs Comparator</h3>
+<table>
+<tr><th></th><th>Comparable</th><th>Comparator</th></tr>
+<tr><td>Package</td><td><code>java.lang</code></td><td><code>java.util</code></td></tr>
+<tr><td>Method</td><td><code>compareTo(T o)</code>, one argument</td><td><code>compare(T a, T b)</code>, two arguments</td></tr>
+<tr><td>Ordering</td><td>Natural / default, <b>one only</b></td><td>Custom, <b>any number</b></td></tr>
+<tr><td>Where written</td><td>Inside the class being compared (modifies it)</td><td>In a separate class or lambda (class unchanged)</td></tr>
+<tr><td>Sorting call</td><td><code>Collections.sort(list)</code></td><td><code>Collections.sort(list, cmp)</code> / <code>list.sort(cmp)</code></td></tr>
+<tr><td>Used by</td><td>String, Integer, LocalDate (built-in natural order)</td><td><code>String.CASE_INSENSITIVE_ORDER</code>, TreeMap(comparator)</td></tr>
+<tr><td>Third-party classes</td><td>Can't add</td><td>Works</td></tr>
+</table>
+</main></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>if(window.hljs)hljs.highlightAll();</script><script src="app.js"></script></body></html>
